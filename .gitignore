@@ -1,0 +1,4 @@
+*.bak
+results/
+result/
+.direnv
