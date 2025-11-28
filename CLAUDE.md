@@ -79,6 +79,38 @@ lib.fs.importAndMerge ./. { inherit lib; }
 
 This means adding a new `.nix` file to a directory automatically exports its attributes.
 
+### lib/ vs modules/
+
+**lib/** and **modules/** serve different purposes:
+
+| Aspect | lib/ | modules/ |
+|--------|------|----------|
+| **Purpose** | Functions and utilities | User-facing options |
+| **Consumer usage** | Called in expressions | Imported, then options are set |
+| **Provides** | Helpers, builders, data transforms | `options.*` definitions with defaults and assertions |
+
+**When to use lib/:**
+- Pure functions (no side effects, no `config`)
+- Utilities that transform or query data
+- Builders that generate derivations or config fragments
+- Internal type definitions used by modules
+
+**When to use modules/:**
+- Defining options that consumers set directly in their configs
+- Anything with `options = { ... }` and `config = { ... }`
+- Assertions and validations on user-provided values
+- Features consumers enable via `imports = [ ... ]`
+
+**Pattern:** When a feature needs both, the module defines the option and the lib provides utilities for working with the data:
+```nix
+# Consumer imports the module, sets the option
+imports = [ inputs.mix-nix.homeManagerModules.someFeature ];
+someFeature = { ... };
+
+# Other modules use lib utilities to work with that data
+lib.desktop.someFeature.transform config.someFeature
+```
+
 ## Common Development Commands
 
 ```bash
