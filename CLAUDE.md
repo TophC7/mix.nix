@@ -1,0 +1,180 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Repository Overview
+
+**mix.nix** is a library of Nix utilities designed to simplify NixOS and Home Manager configurations. It provides reusable patterns, type definitions, and builder functions that reduce boilerplate and enforce consistency across flake-based configurations.
+
+The library is meant to be consumed by other flakes via `inputs.mix-nix`.
+
+## Design Philosophy
+
+### Core Principles
+
+1. **Directory Auto-Discovery Over Explicit Lists**
+   - Configuration modules live in directories and are auto-imported
+   - No manual `imports = [ ./foo.nix ./bar.nix ]` lists
+   - Adding a file to a directory automatically includes it
+
+2. **Declarative Specs Describe "What", Not "How"**
+   - Specifications define properties and identity
+   - Implementation details go in directories
+   - Specs should be minimal - avoid options for things directories/consumers of mix.nix handle
+
+3. **Convention Over Configuration**
+   - Consistent directory structures across the library
+   - Predictable patterns reduce cognitive load
+   - Follow established Nix conventions
+
+4. **Extensibility Via Factory Functions**
+   - Base types stay minimal
+   - Factory functions (`mkXxxSpec`) allow consumers to add custom options
+   - Uses `freeformType` for arbitrary extensions when appropriate
+
+5. **Library, Not Configuration**
+   - mix.nix provides utilities, not opinionated configs
+   - Everything should be generic and reusable
+   - No host-specific or user-specific code
+
+## Architecture
+
+```
+lib/
+├── default.nix      # Entry point - extends nixpkgs lib
+├── fs.nix           # Filesystem utilities
+├── desktop/         # Desktop utilities (colors, wine, theming)
+├── hosts/           # Host/user management utilities
+└── infra/           # Infrastructure utilities (containers, etc.)
+modules/
+├── nixos/           # Reusable NixOS modules
+└── home/            # Reusable Home Manager modules
+parts/
+└── hosts.nix        # Flake-parts integration
+```
+
+### Library Extension Pattern
+
+mix.nix extends `nixpkgs.lib` so all utilities are available under a unified `lib`:
+
+```nix
+lib = (import ./lib) nixpkgs.lib;
+
+# Now available:
+lib.fs.*        # Filesystem utilities
+lib.hosts.*     # Host management
+lib.desktop.*   # Desktop utilities
+lib.infra.*     # Infrastructure utilities
+```
+
+### Auto-Discovery Pattern
+
+All lib subdirectories use `lib.fs.importAndMerge` for auto-discovery:
+
+```nix
+# lib/desktop/default.nix
+{ lib }:
+lib.fs.importAndMerge ./. { inherit lib; }
+```
+
+This means adding a new `.nix` file to a directory automatically exports its attributes.
+
+## Common Development Commands
+
+```bash
+# Check flake validity
+nix flake check
+
+# Show flake outputs
+nix flake show
+
+# Test in a consumer flake
+cd ../dot.nix && nix flake check
+```
+
+## Development Guidelines
+
+### Adding New Utilities
+
+1. Determine which namespace it belongs to (`fs`, `desktop`, `hosts`, `infra`, or new)
+2. Create a `.nix` file in the appropriate directory
+3. Export an attrset - it will be auto-merged
+4. Add documentation in the file header
+
+### When Designing Options/Types
+
+Ask: "Should this be configurable, or should it follow convention?"
+
+- Prefer convention when a sensible default exists
+- Only add options when flexibility is genuinely needed
+- Keep specs minimal - directories handle implementation details
+
+### Code Patterns
+
+**File headers should document usage:**
+```nix
+# Brief description of what this module provides
+#
+# Usage:
+#   lib.namespace.functionName { ... }
+#
+{ lib }:
+{ ... }
+```
+
+**Consistent argument patterns:**
+```nix
+{ lib }:           # For lib utilities
+{ lib, pkgs }:     # When packages are needed
+{ inputs, ... }:   # For flake-parts modules
+```
+
+### Shell Standards
+
+- Prioritize Fish shell for all scripts and examples
+- Use `${lib.getExe pkgs.fish}` for shebangs
+
+## Key Utilities
+
+### lib.fs
+
+Filesystem utilities for auto-discovery:
+- `scanPaths` - List .nix files in a directory
+- `importAndMerge` - Import all files and merge attrsets
+- `scanModules` - Auto-discover modules with named attributes
+
+### lib.desktop
+
+Desktop environment utilities:
+- Color palette generation
+- Wine application wrappers
+- Theming helpers
+
+### lib.hosts
+
+Host and user management:
+- Type definitions for specs
+- Factory functions for extensions
+- Configuration builders
+
+### lib.infra
+
+Infrastructure utilities:
+- Container helpers
+- Networking utilities
+
+## Important Notes
+
+1. **This is a library** - Provides utilities consumed by other flakes
+2. **No hardcoded values** - Everything should be parameterized
+3. **Minimal dependencies** - Only nixpkgs, optionally home-manager
+4. **Type safety** - Use proper Nix types and validation
+5. **Documentation in code** - Comment headers explain usage
+
+## Troubleshooting
+
+When debugging:
+1. Determine if the issue is in mix.nix or the consumer's usage
+2. Verify paths exist when using auto-discovery
+3. Check that all required arguments are passed
+4. Use `nix repl` to test library functions in isolation
