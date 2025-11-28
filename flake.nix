@@ -26,6 +26,7 @@
         ./parts/overlays.nix
         ./parts/packages.nix
         ./parts/devshell.nix
+        ./parts/hosts.nix
       ];
 
       # Systems to build for (Linux only)
