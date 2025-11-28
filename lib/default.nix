@@ -22,5 +22,8 @@ baseLib.extend (
 
     # Host specification and builder utilities
     hosts = import ./hosts { lib = final; };
+
+    # Desktop / Aesthetic utilities
+    desktop = import ./desktop { lib = final; };
   }
 )
