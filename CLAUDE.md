@@ -67,6 +67,33 @@ lib.desktop.*   # Desktop utilities
 lib.infra.*     # Infrastructure utilities
 ```
 
+### Flake-Parts Integration
+
+When using flake-parts, the extended lib **must** be passed via `specialArgs` in `mkFlake`:
+
+```nix
+# flake.nix
+outputs = inputs@{ flake-parts, ... }:
+  let
+    # Create extended lib BEFORE mkFlake
+    lib = (import ./lib) inputs.nixpkgs.lib;
+  in
+  flake-parts.lib.mkFlake {
+    inherit inputs;
+    specialArgs = { inherit lib; };  # Highest priority, cannot be shadowed
+  } { ... };
+```
+
+**Why not `_module.args`?** When a flake-parts module has `{ lib, ... }:` in its
+function signature, flake-parts provides its default `lib` (from nixpkgs-lib)
+before `_module.args` can override it. `specialArgs` has highest priority and
+cannot be shadowed by function arguments.
+
+**For non-flake-parts imports** (like `modules/nixos/default.nix`), pass `lib` explicitly:
+```nix
+nixosModules = import ../modules/nixos { inherit inputs lib; };
+```
+
 ### Auto-Discovery Pattern
 
 All lib subdirectories use `lib.fs.importAndMerge` for auto-discovery:
@@ -185,9 +212,13 @@ Desktop environment utilities:
 ### lib.hosts
 
 Host and user management:
-- Type definitions for specs
-- Factory functions for extensions
-- Configuration builders
+- `lib.hosts.types.userSpec` - User specification type
+- `lib.hosts.types.hostSpec` - Host specification type
+- `lib.hosts.mkUserSpec` - Factory to extend user type with custom options
+- `lib.hosts.mkHostSpec` - Factory to extend host type with custom options
+- `lib.hosts.mkHosts` - Build `nixosConfigurations` from specs
+
+**Namespace convention**: Types live under `.types.*`, factory/builder functions at top level.
 
 ### lib.infra
 
