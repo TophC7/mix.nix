@@ -1,10 +1,6 @@
 # Flake-parts module for packages
-{ inputs, ... }:
+{ lib, ... }:
 
-let
-  # Get extended lib
-  lib = (import ../lib) inputs.nixpkgs.lib;
-in
 {
   # Per-system package outputs
   perSystem =

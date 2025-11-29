@@ -25,9 +25,17 @@
 
   outputs =
     inputs@{ flake-parts, ... }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
+    let
+      # Extend nixpkgs.lib with our custom functions BEFORE entering flake-parts
+      # This must be done here so it can be passed via specialArgs
+      lib = (import ./lib) inputs.nixpkgs.lib;
+    in
+    flake-parts.lib.mkFlake {
+      inherit inputs;
+      # specialArgs has highest priority - cannot be shadowed by module function arguments
+      specialArgs = { inherit lib; };
+    } {
       imports = [
-        ./parts/lib.nix
         ./parts/modules.nix
         ./parts/overlays.nix
         ./parts/packages.nix
@@ -41,7 +49,7 @@
         "aarch64-linux"
       ];
 
-      # Per-system outputs are defined in parts/
-      # Flake-wide outputs (lib, modules, overlays) are also in parts/
+      # Expose extended lib as flake output
+      flake.lib = lib;
     };
 }
