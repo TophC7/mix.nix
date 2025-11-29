@@ -56,20 +56,4 @@
 #     };
 #   };
 #
-{ lib }:
-
-let
-  types = import ./types.nix { inherit lib; };
-  builders = import ./mkHost.nix { inherit lib; };
-in
-{
-  # Type definitions for user and host specifications
-  inherit types;
-
-  # Factory functions to create extended spec types
-  # Re-export from types for convenience
-  inherit (types) mkUserSpec mkHostSpec;
-
-  # Re-export builder functions at top level
-  inherit (builders) mkHost mkHosts;
-}
+{ lib }: lib.fs.importAndMerge ./. { inherit lib; }

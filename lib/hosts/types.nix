@@ -12,17 +12,19 @@
 { lib }:
 
 let
-  inherit (lib) mkOption types;
+  inherit (lib) mkOption;
+  # Rename to avoid shadowing with our exported 'types' attribute
+  t = lib.types;
 
   # ─────────────────────────────────────────────────────────────
   # USER SPEC - Defined once, referenced by hosts
   # ─────────────────────────────────────────────────────────────
 
   # Home Manager configuration (optional - presence enables HM)
-  homeType = types.submodule {
+  homeType = t.submodule {
     options = {
       directory = mkOption {
-        type = types.path;
+        type = t.path;
         description = "Path to user's home-manager config directory (auto-imported)";
         example = "./home/users/toph";
       };
@@ -32,36 +34,36 @@ let
   # Base user options
   baseUserOptions = {
     # Allow arbitrary additional attributes for extensions
-    freeformType = types.attrsOf types.anything;
+    freeformType = t.attrsOf t.anything;
 
     options = {
       name = mkOption {
-        type = types.str;
+        type = t.str;
         description = "Username";
         example = "toph";
       };
 
       uid = mkOption {
-        type = types.nullOr types.int;
+        type = t.nullOr t.int;
         description = "User ID (null for auto-assignment)";
         default = null;
         example = 1000;
       };
 
       group = mkOption {
-        type = types.str;
+        type = t.str;
         description = "Primary group";
         default = "users";
       };
 
       shell = mkOption {
-        type = types.package;
+        type = t.package;
         description = "Default shell package";
         example = "pkgs.fish";
       };
 
       extraGroups = mkOption {
-        type = types.listOf types.str;
+        type = t.listOf t.str;
         description = "Additional groups for the user";
         default = [
           "wheel"
@@ -71,7 +73,7 @@ let
 
       # Optional Home Manager config - presence enables HM
       home = mkOption {
-        type = types.nullOr homeType;
+        type = t.nullOr homeType;
         description = "Home Manager configuration (null = no HM, just system user)";
         default = null;
       };
@@ -83,9 +85,9 @@ let
   # ─────────────────────────────────────────────────────────────
 
   # Desktop environment - null means headless/server
-  desktopType = types.nullOr (
-    types.either types.str (
-      types.enum [
+  desktopType = t.nullOr (
+    t.either t.str (
+      t.enum [
         "gnome"
         "niri"
       ]
@@ -97,24 +99,24 @@ let
     { name, config, ... }:
     {
       # Allow arbitrary additional attributes for extensions
-      freeformType = types.attrsOf types.anything;
+      freeformType = t.attrsOf t.anything;
 
       options = {
         # ── Identity ──
         enable = mkOption {
-          type = types.bool;
+          type = t.bool;
           description = "Whether to build this host configuration";
           default = true;
         };
 
         hostName = mkOption {
-          type = types.str;
+          type = t.str;
           description = "The hostname";
           default = name;
         };
 
         system = mkOption {
-          type = types.enum [
+          type = t.enum [
             "x86_64-linux"
             "aarch64-linux"
           ];
@@ -124,20 +126,20 @@ let
 
         # ── User Reference ──
         user = mkOption {
-          type = types.str;
+          type = t.str;
           description = "Name of user from mix.users (resolved to full spec at build time)";
           example = "toph";
         };
 
         # ── Host Type Flags ──
         isServer = mkOption {
-          type = types.bool;
+          type = t.bool;
           description = "Host is a server (affects defaults like autoLogin)";
           default = false;
         };
 
         isMinimal = mkOption {
-          type = types.bool;
+          type = t.bool;
           description = "Minimal HM config (only coreHomeModules, skip user/host HM directories)";
           default = false;
         };
@@ -151,14 +153,14 @@ let
         };
 
         autoLogin = mkOption {
-          type = types.bool;
+          type = t.bool;
           description = "Enable automatic login";
           default = !config.isServer && config.desktop != null;
         };
 
         # ── Advanced ──
         specialArgs = mkOption {
-          type = types.attrsOf types.unspecified;
+          type = t.attrsOf t.unspecified;
           description = "Additional specialArgs for nixosSystem";
           default = { };
         };
@@ -171,16 +173,22 @@ in
   # EXPORTS
   # ─────────────────────────────────────────────────────────────
 
-  # User specification type
-  userSpec = types.submodule baseUserOptions;
+  # Types namespace - contains all type definitions
+  types = {
+    # User specification type
+    userSpec = t.submodule baseUserOptions;
 
-  # Host specification type
-  hostSpec = types.submodule baseHostOptions;
+    # Host specification type
+    hostSpec = t.submodule baseHostOptions;
 
-  # Factory functions to create extended types
+    # Individual types for reuse
+    inherit homeType desktopType;
+  };
+
+  # Factory functions to create extended types (at top level)
   mkUserSpec =
     extraModule:
-    types.submodule (
+    t.submodule (
       let
         extra = if builtins.isFunction extraModule then extraModule { } else extraModule;
       in
@@ -192,7 +200,7 @@ in
 
   mkHostSpec =
     extraModule:
-    types.submodule (
+    t.submodule (
       args@{ name, config, ... }:
       let
         base = baseHostOptions args;
@@ -204,7 +212,4 @@ in
         config = (base.config or { }) // (extra.config or { });
       }
     );
-
-  # Individual types for reuse
-  inherit homeType desktopType;
 }
