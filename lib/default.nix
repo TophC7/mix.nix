@@ -29,5 +29,8 @@ baseLib.extend (
 
     # Secrets utilities (types for gitignored secrets)
     secrets = import ./secrets { lib = final; };
+
+    # Standalone flake builder (for non-flake-parts users)
+    inherit (import ./mkFlake.nix { lib = final; }) mkFlake;
   }
 )
