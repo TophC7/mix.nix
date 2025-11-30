@@ -11,9 +11,8 @@
 #   modules = [ (lib.secrets.mkModule { github.token = "xxx"; }) ];
 #   # Then in any module: config.secrets.github.token
 #
-{ lib }:
-
 {
+
   # Generate a module that exposes secrets at config.secrets.*
   # Works for both NixOS and Home Manager
   mkModule =

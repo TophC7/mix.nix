@@ -1,14 +1,11 @@
 # Update Spotify to latest version (upstream is outdated)
 # Check for updates: curl -s -H 'X-Ubuntu-Series: 16' "https://api.snapcraft.io/api/v1/snaps/details/spotify?channel=stable" | jq '.revision,.download_sha512,.version'
 {
-  lib,
-  final,
   prev,
-  stable,
-  unstable,
+  ...
 }:
 {
-  spotify = prev.spotify.overrideAttrs (old: rec {
+  spotify = prev.spotify.overrideAttrs (_: rec {
     version = "1.2.74.477.g3be53afe";
     rev = "89";
     src = prev.fetchurl {

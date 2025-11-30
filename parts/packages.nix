@@ -4,7 +4,7 @@
 {
   # Per-system package outputs
   perSystem =
-    { pkgs, system, ... }:
+    { pkgs, ... }:
     {
       # Packages built by this flake
       # Access with: nix build .#packageName

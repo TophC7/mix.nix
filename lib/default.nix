@@ -17,7 +17,7 @@
 baseLib:
 
 baseLib.extend (
-  final: prev: {
+  final: _: {
     # Filesystem utilities
     fs = import ./fs.nix { lib = final; };
 

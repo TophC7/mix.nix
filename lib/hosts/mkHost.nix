@@ -112,7 +112,7 @@ let
           # Core host configuration (user, hostname, etc.)
           ++ [
             (
-              { config, pkgs, ... }:
+              { ... }:
               {
                 # Hostname
                 networking.hostName = spec.hostName;
@@ -186,8 +186,6 @@ let
     {
       # Attrset of host specifications { hostname = spec; ... }
       specs,
-      # Attrset of user specifications { username = spec; ... }
-      users,
       ...
     }@args:
     let

@@ -353,7 +353,7 @@ in
 
       files =
         if matugenGenerated != null then
-          lib.mapAttrs' (name: tmpl: {
+          lib.mapAttrs' (_: tmpl: {
             name = tmpl.path;
             value = "${matugenGenerated}/${tmpl.path}";
           }) allMatugenTemplates
@@ -365,7 +365,7 @@ in
 
     # Install generated matugen files to home directory
     home.file = lib.mkIf (cfg.installGeneratedFiles && matugenGenerated != null) (
-      lib.mapAttrs' (name: tmpl: {
+      lib.mapAttrs' (_: tmpl: {
         name = tmpl.path;
         value = {
           source = "${matugenGenerated}/${tmpl.path}";

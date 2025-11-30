@@ -1,11 +1,8 @@
 # Fix dolphin-emu-primehack CMake compatibility issues
 # Uses STABLE because unstable has mbedtls library conflicts
 {
-  lib,
-  final,
-  prev,
   stable,
-  unstable,
+  ...
 }:
 {
   dolphin-emu-primehack = stable.dolphin-emu-primehack.overrideAttrs (oldAttrs: {
