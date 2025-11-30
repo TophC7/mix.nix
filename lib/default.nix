@@ -10,6 +10,7 @@
 #   - lib.fs.*       - filesystem utilities (scanPaths, importAndMerge)
 #   - lib.infra.*    - infrastructure utilities (containers, networking)
 #   - lib.desktop.*  - desktop utilities (colors, theming)
+#   - lib.secrets.*  - secrets utilities
 #
 # No infinite recursion risk: our modules only use base nixpkgs lib functions,
 # never each other during definition.
@@ -25,5 +26,8 @@ baseLib.extend (
 
     # Desktop / Aesthetic utilities
     desktop = import ./desktop { lib = final; };
+
+    # Secrets utilities (types for gitignored secrets)
+    secrets = import ./secrets { lib = final; };
   }
 )

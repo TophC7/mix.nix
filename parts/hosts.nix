@@ -207,6 +207,7 @@
       nixosConfigurations = lib.hosts.mkHosts {
         specs = config.mix.hosts;
         users = config.mix.users;
+        secrets = config.mix.secrets.loaded or { };
         inherit inputs;
         inherit (config.mix)
           hostsDir

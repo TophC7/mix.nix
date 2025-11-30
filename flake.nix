@@ -30,26 +30,29 @@
       # This must be done here so it can be passed via specialArgs
       lib = (import ./lib) inputs.nixpkgs.lib;
     in
-    flake-parts.lib.mkFlake {
-      inherit inputs;
-      # specialArgs has highest priority - cannot be shadowed by module function arguments
-      specialArgs = { inherit lib; };
-    } {
-      imports = [
-        ./parts/modules.nix
-        ./parts/overlays.nix
-        ./parts/packages.nix
-        ./parts/devshell.nix
-        ./parts/hosts.nix
-      ];
+    flake-parts.lib.mkFlake
+      {
+        inherit inputs;
+        # specialArgs has highest priority - cannot be shadowed by module function arguments
+        specialArgs = { inherit lib; };
+      }
+      {
+        imports = [
+          ./parts/devshell.nix
+          ./parts/hosts.nix
+          ./parts/modules.nix
+          ./parts/overlays.nix
+          ./parts/packages.nix
+          ./parts/secrets.nix
+        ];
 
-      # Systems to build for (Linux only)
-      systems = [
-        "x86_64-linux"
-        "aarch64-linux"
-      ];
+        # Systems to build for (Linux only)
+        systems = [
+          "x86_64-linux"
+          "aarch64-linux"
+        ];
 
-      # Expose extended lib as flake output
-      flake.lib = lib;
-    };
+        # Expose extended lib as flake output
+        flake.lib = lib;
+      };
 }

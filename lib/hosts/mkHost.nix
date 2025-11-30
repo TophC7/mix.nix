@@ -1,14 +1,28 @@
 # Host builder functions
-# Transforms host specifications into NixOS configurations
+# Transforms host/user specifications into nixosConfigurations
 #
-# Users and Hosts are SEPARATE:
-#   - Users defined in mix.users
-#   - Hosts reference users by name (string)
-#   - User is resolved at build time and merged into host.user
+# mkHost  - Build a single host configuration
+# mkHosts - Build multiple host configurations from specs attrset
 #
-# Usage:
-#   lib.hosts.mkHost { name = "myhost"; spec = { ... }; users = { ... }; inherit inputs; }
-#   lib.hosts.mkHosts { specs = { ... }; users = { ... }; inherit inputs; }
+# Arguments (mkHost):
+#   name            - Hostname
+#   spec            - Host specification (from lib.hosts.types.hostSpec)
+#   users           - User specifications attrset
+#   inputs          - Flake inputs
+#   hostsDir        - Optional: auto-discover NixOS config from hostsDir/<name>/
+#   hostsHomeDir    - Optional: auto-discover HM config from hostsHomeDir/<name>/
+#   coreModules     - NixOS modules applied to all hosts
+#   coreHomeModules - Home Manager modules applied to all users with HM
+#   homeManager     - Home Manager input (enables HM integration)
+#   secrets         - Optional: secrets attrset (exposed as config.secrets.*)
+#
+# Arguments (mkHosts):
+#   specs           - Attrset of host specifications { hostname = spec; }
+#   users           - Attrset of user specifications { username = spec; }
+#   (plus all optional args from mkHost)
+#
+# Returns:
+#   Attrset of nixosConfigurations { hostname = nixosSystem; }
 #
 { lib }:
 
@@ -39,6 +53,8 @@ let
       coreHomeModules ? [ ],
       # Optional: Home Manager input
       homeManager ? null,
+      # Optional: Secrets (git-crypt encrypted, freeform attrset)
+      secrets ? { },
     }:
     let
       # ── Resolve user from reference ──
@@ -74,10 +90,10 @@ let
       "${name}" = inputs.nixpkgs.lib.nixosSystem {
         system = spec.system;
 
-        # ── specialArgs: 'host' is available EVERYWHERE ──
+        # ── specialArgs: 'host' and 'secrets' available EVERYWHERE ──
         # host.user is the FULL resolved user spec
         specialArgs = {
-          inherit inputs;
+          inherit inputs secrets;
           host = hostAttrs;
         }
         // spec.specialArgs;
@@ -89,6 +105,9 @@ let
           # Auto-discover host NixOS config from hostsDir/<hostname>/
           # (hardware-configuration.nix should be in the host folder)
           ++ optional hasHostNixos hostNixosPath
+
+          # Secrets module - makes config.secrets.* available
+          ++ [ (lib.secrets.mkModule secrets) ]
 
           # Core host configuration (user, hostname, etc.)
           ++ [
@@ -128,20 +147,24 @@ let
                 useGlobalPkgs = true;
                 useUserPackages = true;
 
-                # 'host' is available in HM modules too (with resolved user)
+                # 'host' and 'secrets' available in HM modules too
                 extraSpecialArgs = {
-                  inherit inputs;
+                  inherit inputs secrets;
                   host = hostAttrs;
                 };
 
                 users.${user.name} = {
                   imports =
-                    if spec.isMinimal then
-                      # MINIMAL: only core HM modules
-                      coreHomeModules
-                    else
-                      # FULL: core + user directory + host directory
-                      coreHomeModules ++ [ user.home.directory ] ++ optional hasHostHome hostHomePath;
+                    # Secrets module for Home Manager
+                    [ (lib.secrets.mkModule secrets) ]
+                    ++ (
+                      if spec.isMinimal then
+                        # MINIMAL: only core HM modules
+                        coreHomeModules
+                      else
+                        # FULL: core + user directory + host directory
+                        coreHomeModules ++ [ user.home.directory ] ++ optional hasHostHome hostHomePath
+                    );
 
                   home = {
                     username = user.name;
