@@ -217,9 +217,6 @@
           homeManager
           ;
       };
-
-      # Expose the flake-parts module for consumers
-      flakeModules.hosts = ./hosts.nix;
     };
   };
 }

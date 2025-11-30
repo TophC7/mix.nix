@@ -37,14 +37,7 @@
         specialArgs = { inherit lib; };
       }
       {
-        imports = [
-          ./parts/devshell.nix
-          ./parts/hosts.nix
-          ./parts/modules.nix
-          ./parts/overlays.nix
-          ./parts/packages.nix
-          ./parts/secrets.nix
-        ];
+        imports = [ ./parts/default.nix ];
 
         # Systems to build for (Linux only)
         systems = [

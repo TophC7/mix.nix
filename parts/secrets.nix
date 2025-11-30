@@ -91,9 +91,5 @@ in
     # Expose loaded secrets
     mix.secrets.loaded = loadedSecrets;
 
-    flake = {
-      # Expose the flake-parts module for consumers
-      flakeModules.secrets = ./secrets.nix;
-    };
   };
 }
