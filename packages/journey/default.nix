@@ -4,13 +4,13 @@ let
 
   pname = "journey";
   meta = builtins.fromJSON (builtins.readFile ./journey.json);
-  version = meta.version;
+  inherit (meta) version;
 in
 appimageTools.wrapType2 {
   inherit pname version;
   src = fetchurl {
     url = "https://github.com/Journey-Cloud/desktop-app-releases/releases/download/${meta.version}/Journey-Desktop-linux-x86_64_${meta.version}.AppImage";
-    sha256 = meta.sha256;
+    inherit (meta) sha256;
   };
 
   extraInstallCommands = ''

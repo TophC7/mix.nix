@@ -111,29 +111,26 @@ let
 
           # Core host configuration (user, hostname, etc.)
           ++ [
-            (
-              { ... }:
-              {
-                # Hostname
-                networking.hostName = spec.hostName;
+            (_: {
+              # Hostname
+              networking.hostName = spec.hostName;
 
-                # Primary user (from user spec)
-                users.users.${user.name} = {
-                  isNormalUser = true;
-                  home = homeDir;
-                  group = user.group;
-                  shell = user.shell;
-                  extraGroups = user.extraGroups;
-                }
-                // (optionalAttrs (user.uid != null) { uid = user.uid; });
-
-                # Auto-login (only if desktop is set)
-                services.displayManager.autoLogin = mkIf (spec.autoLogin && spec.desktop != null) {
-                  enable = true;
-                  user = user.name;
-                };
+              # Primary user (from user spec)
+              users.users.${user.name} = {
+                isNormalUser = true;
+                home = homeDir;
+                group = user.group;
+                shell = user.shell;
+                extraGroups = user.extraGroups;
               }
-            )
+              // (optionalAttrs (user.uid != null) { uid = user.uid; });
+
+              # Auto-login (only if desktop is set)
+              services.displayManager.autoLogin = mkIf (spec.autoLogin && spec.desktop != null) {
+                enable = true;
+                user = user.name;
+              };
+            })
           ]
 
           # ── Home Manager Integration ──
@@ -181,7 +178,6 @@ let
   # ─────────────────────────────────────────────────────────────
   # MULTI-HOST BUILDER
   # ─────────────────────────────────────────────────────────────
-
   mkHosts =
     {
       # Attrset of host specifications { hostname = spec; ... }

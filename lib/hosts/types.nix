@@ -201,7 +201,7 @@ in
   mkHostSpec =
     extraModule:
     t.submodule (
-      args@{ ... }:
+      args:
       let
         base = baseHostOptions args;
         extra = if builtins.isFunction extraModule then extraModule args else extraModule;

@@ -15,7 +15,7 @@ let
   # where prev.lib is plain nixpkgs lib
   lib = (import ../lib) prev.lib;
 
-  system = final.stdenv.hostPlatform.system;
+  inherit (final.stdenv.hostPlatform) system;
 
   # Stable and unstable channel access
   channels = {
@@ -38,8 +38,7 @@ let
   # Import all overrides
   overrides = import ./overrides {
     inherit lib final prev;
-    stable = channels.stable;
-    unstable = channels.unstable;
+    inherit (channels) stable unstable;
   };
 in
 channels // packages // overrides

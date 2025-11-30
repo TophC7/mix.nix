@@ -32,9 +32,7 @@ let
     else
       lib.secrets.load {
         path = cfg.file;
-        gitattributes = cfg.gitattributes;
-        pattern = cfg.pattern;
-        skipValidation = cfg.skipValidation;
+        inherit (cfg) gitattributes pattern skipValidation;
       };
 in
 {

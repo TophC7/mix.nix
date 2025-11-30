@@ -1,7 +1,5 @@
 # Flake-parts module for development shell
-{ ... }:
-
-{
+_: {
   perSystem =
     { pkgs, ... }:
     {

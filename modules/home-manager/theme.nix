@@ -22,7 +22,13 @@
 #   stylix.image = config.theme.image;
 #   stylix.base16Scheme.yaml = config.theme.generated.base16Scheme;
 #
-{ lib, config, pkgs, inputs, ... }:
+{
+  lib,
+  config,
+  pkgs,
+  inputs,
+  ...
+}:
 
 let
   cfg = config.theme;
@@ -70,10 +76,9 @@ let
     if needsMatugen then
       matugenLib.mkDerivation {
         inherit pkgs;
+        inherit (cfg.matugen) scheme;
+        inherit (cfg) image polarity;
         matugenPackage = cfg.matugen.package;
-        image = cfg.image;
-        polarity = cfg.polarity;
-        scheme = cfg.matugen.scheme;
         templates = allMatugenTemplates;
       }
     else
@@ -96,106 +101,115 @@ in
     };
 
     polarity = lib.mkOption {
-      type = lib.types.enum [ "light" "dark" ];
+      type = lib.types.enum [
+        "light"
+        "dark"
+      ];
       default = "dark";
       description = "Whether to use light or dark theme variant";
     };
 
     # Icon specification (OPTIONAL)
     icon = lib.mkOption {
-      type = lib.types.nullOr (lib.types.submodule {
-        options = {
-          package = lib.mkOption {
-            type = lib.types.package;
-            description = "The icon theme package";
-            example = lib.literalExpression "pkgs.papirus-icon-theme";
+      type = lib.types.nullOr (
+        lib.types.submodule {
+          options = {
+            package = lib.mkOption {
+              type = lib.types.package;
+              description = "The icon theme package";
+              example = lib.literalExpression "pkgs.papirus-icon-theme";
+            };
+            name = lib.mkOption {
+              type = lib.types.str;
+              description = "The icon theme name";
+              example = "Papirus";
+            };
           };
-          name = lib.mkOption {
-            type = lib.types.str;
-            description = "The icon theme name";
-            example = "Papirus";
-          };
-        };
-      });
+        }
+      );
       default = null;
       description = "Icon theme specification (null to leave unset)";
     };
 
     # Cursor specification (OPTIONAL)
     pointer = lib.mkOption {
-      type = lib.types.nullOr (lib.types.submodule {
-        options = {
-          package = lib.mkOption {
-            type = lib.types.package;
-            description = "The cursor theme package";
-            example = lib.literalExpression "pkgs.bibata-cursors";
+      type = lib.types.nullOr (
+        lib.types.submodule {
+          options = {
+            package = lib.mkOption {
+              type = lib.types.package;
+              description = "The cursor theme package";
+              example = lib.literalExpression "pkgs.bibata-cursors";
+            };
+            name = lib.mkOption {
+              type = lib.types.str;
+              description = "The cursor theme name";
+              example = "Bibata-Modern-Classic";
+            };
+            size = lib.mkOption {
+              type = lib.types.int;
+              default = 24;
+              description = "The cursor size in pixels";
+            };
           };
-          name = lib.mkOption {
-            type = lib.types.str;
-            description = "The cursor theme name";
-            example = "Bibata-Modern-Classic";
-          };
-          size = lib.mkOption {
-            type = lib.types.int;
-            default = 24;
-            description = "The cursor size in pixels";
-          };
-        };
-      });
+        }
+      );
       default = null;
       description = "Cursor theme specification (null to leave unset)";
     };
 
     # Font specification (OPTIONAL)
     fonts = lib.mkOption {
-      type = lib.types.nullOr (lib.types.submodule {
-        options = {
-          serif = lib.mkOption {
-            type = fontType;
-            description = "Serif font configuration";
-          };
-          sansSerif = lib.mkOption {
-            type = fontType;
-            description = "Sans-serif font configuration";
-          };
-          monospace = lib.mkOption {
-            type = fontType;
-            description = "Monospace font configuration";
-          };
-          emoji = lib.mkOption {
-            type = fontType;
-            description = "Emoji font configuration";
-          };
-          sizes = lib.mkOption {
-            type = lib.types.submodule {
-              options = {
-                applications = lib.mkOption {
-                  type = lib.types.int;
-                  default = 12;
-                  description = "Font size for applications";
-                };
-                desktop = lib.mkOption {
-                  type = lib.types.int;
-                  default = 11;
-                  description = "Font size for desktop elements";
-                };
-                popups = lib.mkOption {
-                  type = lib.types.int;
-                  default = 11;
-                  description = "Font size for popups and notifications";
-                };
-                terminal = lib.mkOption {
-                  type = lib.types.int;
-                  default = 12;
-                  description = "Font size for terminal emulators";
+      type = lib.types.nullOr (
+        lib.types.submodule {
+          options = {
+            serif = lib.mkOption {
+              type = fontType;
+              description = "Serif font configuration";
+            };
+            sansSerif = lib.mkOption {
+              type = fontType;
+              description = "Sans-serif font configuration";
+            };
+            monospace = lib.mkOption {
+              type = fontType;
+              description = "Monospace font configuration";
+            };
+            emoji = lib.mkOption {
+              type = fontType;
+              description = "Emoji font configuration";
+            };
+            sizes = lib.mkOption {
+              type = lib.types.submodule {
+                options = {
+                  applications = lib.mkOption {
+                    type = lib.types.int;
+                    default = 12;
+                    description = "Font size for applications";
+                  };
+                  desktop = lib.mkOption {
+                    type = lib.types.int;
+                    default = 11;
+                    description = "Font size for desktop elements";
+                  };
+                  popups = lib.mkOption {
+                    type = lib.types.int;
+                    default = 11;
+                    description = "Font size for popups and notifications";
+                  };
+                  terminal = lib.mkOption {
+                    type = lib.types.int;
+                    default = 12;
+                    description = "Font size for terminal emulators";
+                  };
                 };
               };
+              default = { };
+              description = "Font sizes for different contexts";
             };
-            default = { };
-            description = "Font sizes for different contexts";
           };
-        };
-      });
+        }
+      );
       default = null;
       description = "Font specification (null to leave unset)";
     };
@@ -253,20 +267,22 @@ in
       };
 
       templates = lib.mkOption {
-        type = lib.types.attrsOf (lib.types.submodule {
-          options = {
-            template = lib.mkOption {
-              type = lib.types.path;
-              description = "Path to the matugen template file";
-              example = lib.literalExpression "./templates/style.css";
+        type = lib.types.attrsOf (
+          lib.types.submodule {
+            options = {
+              template = lib.mkOption {
+                type = lib.types.path;
+                description = "Path to the matugen template file";
+                example = lib.literalExpression "./templates/style.css";
+              };
+              path = lib.mkOption {
+                type = lib.types.str;
+                description = "Output path for the generated file (relative to HOME)";
+                example = ".config/myapp/colors.css";
+              };
             };
-            path = lib.mkOption {
-              type = lib.types.str;
-              description = "Output path for the generated file (relative to HOME)";
-              example = ".config/myapp/colors.css";
-            };
-          };
-        });
+          }
+        );
         default = { };
         description = ''
           Matugen template configurations.
