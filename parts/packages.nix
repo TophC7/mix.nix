@@ -1,10 +1,18 @@
 # Flake-parts module for packages
-{ lib, ... }:
+{ lib, inputs, ... }:
 
 {
   # Per-system package outputs
   perSystem =
-    { pkgs, ... }:
+    { system, ... }:
+    let
+      # Create pkgs instance that allows unfree packages
+      # Some packages (e.g., journey) have unfree licenses, we want to include them
+      pkgs = import inputs.nixpkgs {
+        inherit system;
+        config.allowUnfree = true;
+      };
+    in
     {
       # Packages built by this flake
       # Access with: nix build .#packageName
