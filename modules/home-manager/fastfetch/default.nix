@@ -17,6 +17,11 @@
 #     logo.directory = ./logos;
 #   };
 #
+# Auto-discovery (when used with mix.hosts):
+#   If no logo options are set, looks for logo.png in the user's
+#   home.directory (from host.user.home.directory).
+#   e.g., ./home/gojo/logo.png
+#
 {
   lib,
   pkgs,
@@ -44,8 +49,15 @@ let
     else
       null;
 
+  # Get user's home directory from host spec (if available)
+  userHomeDir =
+    if host != null && host ? user && host.user ? home && host.user.home != null then
+      host.user.home.directory
+    else
+      null;
+
   # Resolve logo file
-  # Priority: source > directory lookup > fallback
+  # Priority: source > directory lookup > user home directory > fallback
   logoFile =
     if cfg.logo.source != null then
       cfg.logo.source
@@ -54,6 +66,12 @@ let
         hostLogoPath = cfg.logo.directory + "/${resolvedHostname}.png";
       in
       if builtins.pathExists hostLogoPath then hostLogoPath else fallbackLogo
+    else if userHomeDir != null then
+      # Auto-discover from user's home.directory
+      let
+        homeLogoPath = userHomeDir + "/logo.png";
+      in
+      if builtins.pathExists homeLogoPath then homeLogoPath else fallbackLogo
     else
       fallbackLogo;
 
