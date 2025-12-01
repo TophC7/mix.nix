@@ -26,7 +26,6 @@
   lib,
   config,
   pkgs,
-  inputs,
   ...
 }:
 
@@ -244,9 +243,9 @@ in
     matugen = {
       package = lib.mkOption {
         type = lib.types.package;
-        default = inputs.matugen.packages.${pkgs.stdenv.hostPlatform.system}.default;
-        defaultText = lib.literalExpression "inputs.matugen.packages.\${system}.default";
-        description = "The matugen package to use for color generation";
+        default = pkgs.matugen;
+        defaultText = lib.literalExpression "pkgs.matugen";
+        description = "The matugen package to use for color generation. Available via mix.nix overlay.";
       };
 
       scheme = lib.mkOption {
@@ -310,83 +309,87 @@ in
     generated = {
       base16Scheme = lib.mkOption {
         type = lib.types.nullOr lib.types.path;
-        default = null;
         readOnly = true;
         description = "Path to the generated or provided base16 scheme";
       };
 
       files = lib.mkOption {
         type = lib.types.attrsOf lib.types.path;
-        default = { };
         readOnly = true;
         description = "Paths to all generated matugen files";
       };
 
       derivation = lib.mkOption {
         type = lib.types.nullOr lib.types.package;
-        default = null;
         readOnly = true;
         description = "The matugen output derivation (if any)";
       };
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    assertions =
-      let
-        base16Options = [
-          (cfg.base16.file != null)
-          (cfg.base16.package != null)
-          cfg.base16.generate
+  config = lib.mkMerge [
+    # Generated outputs - always defined (may be null when disabled)
+    {
+      theme.generated = {
+        base16Scheme =
+          if !cfg.enable then
+            null
+          else if cfg.base16.file != null then
+            cfg.base16.file
+          else if cfg.base16.package != null then
+            cfg.base16.package
+          else if cfg.base16.generate && matugenGenerated != null then
+            "${matugenGenerated}/.local/share/base16/matugen-scheme.yaml"
+          else
+            null;
+
+        files =
+          if cfg.enable && matugenGenerated != null then
+            lib.mapAttrs' (_: tmpl: {
+              name = tmpl.path;
+              value = "${matugenGenerated}/${tmpl.path}";
+            }) allMatugenTemplates
+          else
+            { };
+
+        derivation = if cfg.enable then matugenGenerated else null;
+      };
+    }
+
+    # Enabled-only config
+    (lib.mkIf cfg.enable {
+      assertions =
+        let
+          base16Options = [
+            (cfg.base16.file != null)
+            (cfg.base16.package != null)
+            cfg.base16.generate
+          ];
+          base16OptionsSet = lib.count lib.id base16Options;
+        in
+        [
+          {
+            assertion = cfg.image != null;
+            message = "theme.image must be set when theme is enabled";
+          }
+          {
+            assertion = base16OptionsSet <= 1;
+            message = ''
+              theme.base16.file, theme.base16.package, and theme.base16.generate are mutually exclusive.
+              Only one can be set at a time.
+            '';
+          }
         ];
-        base16OptionsSet = lib.count lib.id base16Options;
-      in
-      [
-        {
-          assertion = cfg.image != null;
-          message = "theme.image must be set when theme is enabled";
-        }
-        {
-          assertion = base16OptionsSet <= 1;
-          message = ''
-            theme.base16.file, theme.base16.package, and theme.base16.generate are mutually exclusive.
-            Only one can be set at a time.
-          '';
-        }
-      ];
 
-    # Set generated outputs
-    theme.generated = {
-      base16Scheme =
-        if cfg.base16.file != null then
-          cfg.base16.file
-        else if cfg.base16.package != null then
-          cfg.base16.package
-        else if cfg.base16.generate && matugenGenerated != null then
-          "${matugenGenerated}/.local/share/base16/matugen-scheme.yaml"
-        else
-          null;
-
-      files =
-        if matugenGenerated != null then
-          lib.mapAttrs' (_: tmpl: {
-            name = tmpl.path;
-            value = "${matugenGenerated}/${tmpl.path}";
-          }) allMatugenTemplates
-        else
-          { };
-
-      derivation = matugenGenerated;
-    };
-
-    # Install generated matugen files to home directory
-    home.file = lib.mkIf (cfg.installGeneratedFiles && matugenGenerated != null) (
-      lib.mapAttrs' (_: tmpl: {
-        name = tmpl.path;
-        value = {
-          source = "${matugenGenerated}/${tmpl.path}";
-        };
-      }) allMatugenTemplates
-    );
-  };
+      # Install generated matugen files to home directory
+      home.file = lib.mkIf (cfg.installGeneratedFiles && matugenGenerated != null) (
+        lib.mapAttrs' (_: tmpl: {
+          name = tmpl.path;
+          value = {
+            source = "${matugenGenerated}/${tmpl.path}";
+          };
+        }) allMatugenTemplates
+      );
+    })
+  ];
 }

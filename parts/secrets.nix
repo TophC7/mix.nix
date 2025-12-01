@@ -75,10 +75,8 @@ in
       '';
     };
 
-    # Read-only: the loaded secrets
     loaded = lib.mkOption {
       type = lib.types.attrsOf lib.types.anything;
-      default = { };
       readOnly = true;
       description = ''
         The loaded secrets (read-only).

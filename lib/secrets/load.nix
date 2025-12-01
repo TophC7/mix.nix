@@ -20,7 +20,6 @@
 #   # => { github.token = "..."; wifi.home = "..."; }
 #
 { lib }:
-
 {
   load =
     {
@@ -64,5 +63,6 @@
       secrets = import path;
     in
     # Force validation before returning secrets
-    assert validated; secrets;
+    assert validated;
+    secrets;
 }
