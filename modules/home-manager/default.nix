@@ -1,16 +1,28 @@
 # Home Manager modules index
-# All modules are auto-discovered and exposed as individual attributes
+# Auto-discovers modules and exposes them as paths (not pre-imported)
 #
 # Usage (individual):
-#   imports = [ inputs.lib-nix.homeManagerModules.colors ];
+#   imports = [ inputs.mix-nix.homeManagerModules.fastfetch ];
 #
-# Usage (all at once):
-#   imports = [ inputs.lib-nix.homeManagerModules.default ];
-{ inputs, lib, ... }:
+# Usage (all):
+#   imports = [ inputs.mix-nix.homeManagerModules.default ];
+#
+{ lib, ... }:
+let
+  # Convert filename to attr name (strip .nix suffix)
+  toAttrName = name: if lib.hasSuffix ".nix" name then lib.removeSuffix ".nix" name else name;
 
-# Auto-discover all modules as named attributes + default for importing all
-lib.fs.scanModules ./. { inherit inputs; }
+  # Build attrset of module paths from filenames
+  modules = lib.listToAttrs (
+    map (name: {
+      name = toAttrName name;
+      value = ./. + "/${name}";
+    }) (lib.fs.scanNames ./.)
+  );
+in
+modules
 // {
+  # Import all modules at once
   default =
     { ... }:
     {
