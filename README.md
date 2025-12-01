@@ -539,6 +539,85 @@ The primary integration point. Define users once, reference them across hosts, a
 | `mix.hostsDir`     | `null` \| `path` | `null`  | Auto-discover NixOS configs from `<hostsDir>/<hostname>/`  |
 | `mix.hostsHomeDir` | `null` \| `path` | `null`  | Auto-discover HM configs from `<hostsHomeDir>/<hostname>/` |
 
+#### How Module Import Works
+
+**Important:** mix.nix only imports the `default.nix` from each directory path you provide. It does NOT recursively scan or auto-import sibling files.
+
+For example, with this configuration:
+```nix
+mix = {
+  coreModules = [ ./modules/core ];           # Imports ./modules/core/default.nix
+  coreHomeModules = [ ./home/core ];          # Imports ./home/core/default.nix
+  hostsDir = ./hosts;                          # Imports ./hosts/<hostname>/default.nix
+  hostsHomeDir = ./home/hosts;                 # Imports ./home/hosts/<hostname>/default.nix
+  users.toph.home.directory = ./home/users/toph;  # Imports ./home/users/toph/default.nix
+};
+```
+
+**Each `default.nix` controls what gets imported from its directory.** This gives you full control over your module structure.
+
+##### Using `lib.scanPaths` (Optional)
+
+If you want automatic sibling import, use `lib.scanPaths` in your `default.nix`:
+
+```nix
+# modules/core/default.nix
+{ lib, ... }:
+{
+  imports = lib.scanPaths ./.;  # Auto-imports all .nix files and directories with default.nix
+}
+```
+
+`lib.scanPaths` returns paths to:
+- All `.nix` files (except `default.nix` itself)
+- All directories (Nix will look for their `default.nix`)
+
+##### ⚠️ Pitfall: Non-Module Directories
+
+`lib.scanPaths` includes ALL directories, so directories without a `default.nix` will cause import failures:
+
+```
+home/hosts/gojo/
+├── default.nix      # Entry point
+├── theme.nix        # ✅ Imported as file
+├── config/          # ✅ Imported if config/default.nix exists
+│   └── default.nix
+└── wallpapers/      # ❌ FAILS - no default.nix!
+    └── mountain.png
+```
+
+**Solutions:**
+
+1. **Keep assets outside scanned directories:**
+   ```
+   home/hosts/gojo/
+   ├── default.nix
+   ├── theme.nix
+   └── wallpaper.png   # Reference directly: ./wallpaper.png
+   ```
+
+2. **Don't use `scanPaths` - import explicitly:**
+   ```nix
+   # default.nix
+   { ... }:
+   {
+     imports = [
+       ./theme.nix
+       ./programs.nix
+       # Don't import ./wallpapers - it's just assets
+     ];
+   }
+   ```
+
+3. **Use a dedicated assets path referenced in your config:**
+   ```nix
+   # theme.nix
+   { ... }:
+   {
+     theme.image = ./assets/wallpaper.png;  # Direct path, not imported
+   }
+   ```
+
 #### Type Extension
 
 | Option             | Type              | Default                    | Description                                 |
