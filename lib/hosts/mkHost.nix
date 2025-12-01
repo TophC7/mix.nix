@@ -90,10 +90,11 @@ let
       "${name}" = inputs.nixpkgs.lib.nixosSystem {
         system = spec.system;
 
-        # ── specialArgs: 'host' and 'secrets' available EVERYWHERE ──
+        # ── specialArgs: 'host', 'secrets', and extended 'lib' available EVERYWHERE ──
         # host.user is the FULL resolved user spec
+        # lib includes mix.nix extensions (lib.scanPaths, lib.hosts, etc.)
         specialArgs = {
-          inherit inputs secrets;
+          inherit inputs secrets lib;
           host = hostAttrs;
         }
         // spec.specialArgs;
@@ -144,9 +145,9 @@ let
                 useGlobalPkgs = true;
                 useUserPackages = true;
 
-                # 'host' and 'secrets' available in HM modules too
+                # 'host', 'secrets', and extended 'lib' available in HM modules too
                 extraSpecialArgs = {
-                  inherit inputs secrets;
+                  inherit inputs secrets lib;
                   host = hostAttrs;
                 };
 
