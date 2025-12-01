@@ -57,9 +57,9 @@ let
       };
 
       shell = mkOption {
-        type = t.package;
-        description = "Default shell package";
-        example = "pkgs.fish";
+        type = t.either t.package t.str;
+        description = "Default shell package or name (string resolved at build time via pkgs)";
+        example = "fish";
       };
 
       extraGroups = mkOption {

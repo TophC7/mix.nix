@@ -112,32 +112,43 @@ let
 
           # Core host configuration (user, hostname, etc.)
           ++ [
-            (_: {
-              # Hostname
-              networking.hostName = spec.hostName;
+            (
+              { pkgs, ... }:
+              {
+                # Apply mix.nix overlay (provides pkgs.matugen, pkgs.stable.*, pkgs.eden, etc.)
+                nixpkgs.overlays = [ (import ../../overlays { inherit inputs; }) ];
 
-              # Primary user (from user spec)
-              users.users.${user.name} = {
-                isNormalUser = true;
-                home = homeDir;
-                group = user.group;
-                shell = user.shell;
-                extraGroups = user.extraGroups;
+                # Hostname
+                networking.hostName = spec.hostName;
+
+                # Primary user (from user spec)
+                # shell can be a package or string (resolved via pkgs)
+                users.users.${user.name} = {
+                  isNormalUser = true;
+                  home = homeDir;
+                  group = user.group;
+                  shell = if builtins.isString user.shell then pkgs.${user.shell} else user.shell;
+                  extraGroups = user.extraGroups;
+                }
+                // (optionalAttrs (user.uid != null) { uid = user.uid; });
+
+                # Auto-login (only if desktop is set)
+                services.displayManager.autoLogin = mkIf (spec.autoLogin && spec.desktop != null) {
+                  enable = true;
+                  user = user.name;
+                };
               }
-              // (optionalAttrs (user.uid != null) { uid = user.uid; });
-
-              # Auto-login (only if desktop is set)
-              services.displayManager.autoLogin = mkIf (spec.autoLogin && spec.desktop != null) {
-                enable = true;
-                user = user.name;
-              };
-            })
+            )
           ]
 
           # ── Home Manager Integration ──
           # Only if user has home config AND homeManager input is provided
           ++ optional (hmEnabled && homeManager != null) (
-            { config, ... }:
+            { config, pkgs, ... }:
+            let
+              # Resolve shell string to package (e.g., "fish" -> pkgs.fish)
+              resolveShell = shell: if builtins.isString shell then pkgs.${shell} else shell;
+            in
             {
               imports = [ homeManager.nixosModules.home-manager ];
 
@@ -145,24 +156,28 @@ let
                 useGlobalPkgs = true;
                 useUserPackages = true;
 
-                # 'host', 'secrets', and extended 'lib' available in HM modules too
                 extraSpecialArgs = {
-                  inherit inputs secrets lib;
-                  host = hostAttrs;
+                  inherit inputs secrets;
+                  # host.user.shell is resolved to a package here
+                  host = hostAttrs // {
+                    user = hostAttrs.user // {
+                      shell = resolveShell hostAttrs.user.shell;
+                    };
+                  };
                 };
 
                 users.${user.name} = {
-                  imports =
-                    # Secrets module for Home Manager
-                    [ (lib.secrets.mkModule secrets) ]
-                    ++ (
-                      if spec.isMinimal then
-                        # MINIMAL: only core HM modules
-                        coreHomeModules
-                      else
-                        # FULL: core + user directory + host directory
-                        coreHomeModules ++ [ user.home.directory ] ++ optional hasHostHome hostHomePath
-                    );
+                  imports = [
+                    (lib.secrets.mkModule secrets)
+                  ]
+                  ++ (
+                    if spec.isMinimal then
+                      # MINIMAL: only core HM modules
+                      coreHomeModules
+                    else
+                      # FULL: core + user directory + host directory
+                      coreHomeModules ++ [ user.home.directory ] ++ optional hasHostHome hostHomePath
+                  );
 
                   home = {
                     username = user.name;
