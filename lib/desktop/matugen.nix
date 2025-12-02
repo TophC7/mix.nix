@@ -1,13 +1,29 @@
 # Matugen utility functions for Material You theme generation
 #
+# Provides utilities for generating base16-compatible color schemes from
+# wallpaper images using matugen (Material You color generation).
+#
 # Usage:
 #   lib.desktop.matugen.mkBase16Template { polarity = "dark"; }
 #   lib.desktop.matugen.mkDerivation { pkgs, matugenPackage, image, polarity, scheme, templates }
 #
 { lib }:
+
 {
   matugen = {
-    # Generate a base16 template YAML for Material You → base16 color mapping
+    # Generate a base16 template YAML for Material You color mapping
+    #
+    # Creates a YAML template that maps Material You color tokens to the
+    # standard base16 color scheme format for use with theme generators.
+    #
+    # Arguments:
+    #   polarity: Theme variant - "light" or "dark"
+    #
+    # Returns: String containing YAML template with matugen color placeholders
+    #
+    # Usage:
+    #   lib.desktop.matugen.mkBase16Template { polarity = "dark"; }
+    #
     mkBase16Template =
       { polarity }:
       ''
@@ -35,29 +51,33 @@
           base0F: "{{colors.error_container.default.hex}}"
       '';
 
-    # Generate TOML configuration for matugen templates
-    # Takes an attrset of { name = { template, path }; } and produces TOML entries
-    mkTemplateConfig =
-      templates:
-      lib.concatStringsSep "\n" (
-        lib.mapAttrsToList (name: tmpl: ''
-          [templates.${name}]
-          input_path = "${tmpl.template}"
-          output_path = "$out/${tmpl.path}"
-        '') templates
-      );
-
-    # Build a matugen derivation that generates all templates
+    # Build a matugen derivation that generates themed files
+    #
+    # Creates a Nix derivation that runs matugen to generate all specified
+    # template files from a wallpaper image using Material You color extraction.
     #
     # Arguments:
-    #   pkgs          - nixpkgs package set
-    #   matugenPackage - the matugen package to use
-    #   image         - path to wallpaper image
-    #   polarity      - "light" or "dark"
-    #   scheme        - matugen scheme type (e.g., "scheme-expressive")
-    #   templates     - attrset of { name = { template, path }; }
+    #   pkgs: Nixpkgs package set
+    #   matugenPackage: The matugen package to use for generation
+    #   image: Path to wallpaper image for color extraction
+    #   polarity: Theme variant - "light" or "dark"
+    #   scheme: Matugen scheme type (e.g., "scheme-expressive", "scheme-tonal-spot")
+    #   templates: Attrset of { name = { template, path }; } defining output files
     #
-    # Returns: derivation with generated files
+    # Returns: Derivation containing generated files at specified paths
+    #
+    # Usage:
+    #   lib.desktop.matugen.mkDerivation {
+    #     inherit pkgs;
+    #     matugenPackage = pkgs.matugen;
+    #     image = ./wallpaper.png;
+    #     polarity = "dark";
+    #     scheme = "scheme-expressive";
+    #     templates = {
+    #       colors = { template = ./colors.yaml; path = "colors.yaml"; };
+    #     };
+    #   }
+    #
     mkDerivation =
       {
         pkgs,
@@ -90,5 +110,33 @@
             --mode ${polarity} \
             --config config.toml
         '';
+
+    # Generate TOML configuration for matugen templates
+    #
+    # Transforms a Nix attrset of template definitions into TOML format
+    # suitable for matugen's configuration file.
+    #
+    # Arguments:
+    #   templates: Attrset of { name = { template, path }; }
+    #     - template: Path to the input template file
+    #     - path: Output path relative to derivation root
+    #
+    # Returns: String containing TOML template configuration sections
+    #
+    # Usage:
+    #   lib.desktop.matugen.mkTemplateConfig {
+    #     colors = { template = ./colors.yaml; path = "colors.yaml"; };
+    #     theme = { template = ./theme.css; path = "theme.css"; };
+    #   }
+    #
+    mkTemplateConfig =
+      templates:
+      lib.concatStringsSep "\n" (
+        lib.mapAttrsToList (name: tmpl: ''
+          [templates.${name}]
+          input_path = "${tmpl.template}"
+          output_path = "$out/${tmpl.path}"
+        '') templates
+      );
   };
 }
