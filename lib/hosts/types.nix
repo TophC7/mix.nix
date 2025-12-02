@@ -20,18 +20,8 @@ let
   # USER SPEC - Defined once, referenced by hosts
   # ─────────────────────────────────────────────────────────────
 
-  # Home Manager configuration (optional - presence enables HM)
-  homeType = t.submodule {
-    options = {
-      directory = mkOption {
-        type = t.path;
-        description = "Path to user's home-manager config directory (auto-imported)";
-        example = "./home/users/toph";
-      };
-    };
-  };
-
   # Base user options
+  # Home Manager is auto-enabled via usersHomeDir discovery (no explicit option needed)
   baseUserOptions = {
     # Allow arbitrary additional attributes for extensions
     freeformType = t.attrsOf t.anything;
@@ -69,13 +59,6 @@ let
           "wheel"
           "networkmanager"
         ];
-      };
-
-      # Optional Home Manager config - presence enables HM
-      home = mkOption {
-        type = t.nullOr homeType;
-        description = "Home Manager configuration (null = no HM, just system user)";
-        default = null;
       };
     };
   };
@@ -182,7 +165,7 @@ in
     hostSpec = t.submodule baseHostOptions;
 
     # Individual types for reuse
-    inherit homeType desktopType;
+    inherit desktopType;
   };
 
   # Factory functions to create extended types (at top level)

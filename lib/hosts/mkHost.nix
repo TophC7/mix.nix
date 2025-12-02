@@ -9,12 +9,14 @@
 #   spec            - Host specification (from lib.hosts.types.hostSpec)
 #   users           - User specifications attrset
 #   inputs          - Flake inputs
-#   hostsDir        - Optional: auto-discover NixOS config from hostsDir/<name>/
-#   hostsHomeDir    - Optional: auto-discover HM config from hostsHomeDir/<name>/
+#   hostsDir        - Optional: auto-discover NixOS config from hostsDir/<name>/ or <name>.nix
+#   hostsHomeDir    - Optional: auto-discover HM config from hostsHomeDir/<name>/ or <name>.nix
+#   usersHomeDir    - Optional: auto-discover user HM config from usersHomeDir/<username>/ or <username>.nix
 #   coreModules     - NixOS modules applied to all hosts
 #   coreHomeModules - Home Manager modules applied to all users with HM
 #   homeManager     - Home Manager input (enables HM integration)
 #   secrets         - Optional: secrets attrset (exposed as config.secrets.*)
+#   specialArgs     - Optional: global special arguments (merged with spec.specialArgs)
 #
 # Arguments (mkHosts):
 #   specs           - Attrset of host specifications { hostname = spec; }
@@ -47,6 +49,8 @@ let
       hostsDir ? null,
       # Optional: path to home/hosts directory for HM auto-discovery
       hostsHomeDir ? null,
+      # Optional: path to home/users directory for user HM auto-discovery
+      usersHomeDir ? null,
       # CORE NixOS modules - applied to ALL hosts
       coreModules ? [ ],
       # CORE Home Manager modules - applied to ALL users with HM
@@ -55,6 +59,10 @@ let
       homeManager ? null,
       # Optional: Secrets (git-crypt encrypted, freeform attrset)
       secrets ? { },
+      # Optional: Global special arguments (merged with spec.specialArgs)
+      specialArgs ? { },
+      # Optional: All host specs (for cross-host lookups like VPN peer discovery)
+      specs ? { },
     }:
     let
       # ── Resolve user from reference ──
@@ -62,19 +70,50 @@ let
         users.${spec.user}
           or (throw "Host '${name}' references unknown user '${spec.user}'. Available users: ${builtins.concatStringsSep ", " (builtins.attrNames users)}");
 
-      # Home Manager enabled only if user has home config
-      hmEnabled = user.home != null;
-
       # Home directory path
       homeDir = "/home/${user.name}";
 
-      # Host-specific home config path (for auto-discovery)
-      hostHomePath = hostsHomeDir + "/${name}";
-      hasHostHome = hostsHomeDir != null && builtins.pathExists hostHomePath;
+      # User-specific home config path (for auto-discovery)
+      # Supports both directory (home/users/<username>/) and flat file (home/users/<username>.nix)
+      userHomePath =
+        let
+          dirPath = usersHomeDir + "/${user.name}";
+          filePath = usersHomeDir + "/${user.name}.nix";
+        in
+        if usersHomeDir == null then null
+        else if builtins.pathExists dirPath then dirPath
+        else if builtins.pathExists filePath then filePath
+        else null;
+      hasUserHome = userHomePath != null;
+
+      # Home Manager enabled only if user home config exists
+      hmEnabled = hasUserHome;
 
       # Host-specific NixOS config path (for auto-discovery)
-      hostNixosPath = hostsDir + "/${name}";
-      hasHostNixos = hostsDir != null && builtins.pathExists hostNixosPath;
+      # Supports both directory (hosts/<name>/) and flat file (hosts/<name>.nix)
+      hostNixosPath =
+        let
+          dirPath = hostsDir + "/${name}";
+          filePath = hostsDir + "/${name}.nix";
+        in
+        if hostsDir == null then null
+        else if builtins.pathExists dirPath then dirPath
+        else if builtins.pathExists filePath then filePath
+        else null;
+      hasHostNixos = hostNixosPath != null;
+
+      # Host-specific home config path (for auto-discovery)
+      # Supports both directory (home/hosts/<name>/) and flat file (home/hosts/<name>.nix)
+      hostHomePath =
+        let
+          dirPath = hostsHomeDir + "/${name}";
+          filePath = hostsHomeDir + "/${name}.nix";
+        in
+        if hostsHomeDir == null then null
+        else if builtins.pathExists dirPath then dirPath
+        else if builtins.pathExists filePath then filePath
+        else null;
+      hasHostHome = hostHomePath != null;
 
       # ── Build the 'host' attribute for specialArgs ──
       # host.user contains the FULL resolved user spec
@@ -90,13 +129,16 @@ let
       "${name}" = inputs.nixpkgs.lib.nixosSystem {
         system = spec.system;
 
-        # ── specialArgs: 'host', 'secrets', and extended 'lib' available EVERYWHERE ──
-        # host.user is the FULL resolved user spec
-        # lib includes mix.nix extensions (lib.scanPaths, lib.hosts, etc.)
+        # ── specialArgs: 'host', 'hosts', 'secrets', and extended 'lib' available EVERYWHERE ──
+        # host      - Current host's spec (with resolved user)
+        # hosts     - All host specs (for cross-host lookups like VPN peer discovery)
+        # lib       - Extended lib with mix.nix utilities
         specialArgs = {
           inherit inputs secrets lib;
           host = hostAttrs;
+          hosts = specs;
         }
+        // specialArgs
         // spec.specialArgs;
 
         modules =
@@ -164,7 +206,10 @@ let
                       shell = resolveShell hostAttrs.user.shell;
                     };
                   };
-                };
+                  hosts = specs;
+                }
+                // specialArgs
+                // spec.specialArgs;
 
                 users.${user.name} = {
                   imports = [
@@ -175,8 +220,8 @@ let
                       # MINIMAL: only core HM modules
                       coreHomeModules
                     else
-                      # FULL: core + user directory + host directory
-                      coreHomeModules ++ [ user.home.directory ] ++ optional hasHostHome hostHomePath
+                      # FULL: core + user config + host config
+                      coreHomeModules ++ [ userHomePath ] ++ optional hasHostHome hostHomePath
                   );
 
                   home = {
@@ -204,13 +249,13 @@ let
       # Filter to only enabled hosts
       enabledSpecs = lib.filterAttrs (_: spec: spec.enable or true) specs;
 
-      # Build each host
+      # Build each host (pass specs through for cross-host lookups)
       hostConfigs = lib.mapAttrsToList (
         name: spec:
         mkHost (
           (builtins.removeAttrs args [ "specs" ])
           // {
-            inherit name spec;
+            inherit name spec specs;
           }
         )
       ) enabledSpecs;
