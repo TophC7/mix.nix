@@ -8,9 +8,10 @@
 # You get:
 #   - All of nixpkgs lib (lib.mkOption, lib.types, lib.attrsets, etc.)
 #   - lib.fs.*       - filesystem utilities (scanPaths, importAndMerge)
-#   - lib.infra.*    - infrastructure utilities (containers, networking)
+#   - lib.infra.*    - infrastructure utilities (containers)
 #   - lib.desktop.*  - desktop utilities (colors, theming)
 #   - lib.secrets.*  - secrets utilities
+#   - lib.mkFlake    - standalone flake builder (for non-flake-parts users)
 #
 # No infinite recursion risk: our modules only use base nixpkgs lib functions,
 # never each other during definition.
@@ -23,6 +24,9 @@ baseLib.extend (
 
     # Host specification and builder utilities
     hosts = import ./hosts { lib = final; };
+
+    # Infrastructure / Server utilities
+    infra = import ./infra { lib = final; };
 
     # Desktop / Aesthetic utilities
     desktop = import ./desktop { lib = final; };
