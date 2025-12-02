@@ -16,6 +16,9 @@
   - [monitors](#monitors)
   - [fastfetch](#fastfetch)
   - [nautilus](#nautilus)
+- [NixOS Modules](#nixos-modules)
+  - [newt](#newt)
+  - [olm](#olm)
 - [Flake-Parts Modules](#flake-parts-modules)
   - [hosts](#hosts)
   - [secrets](#secrets)
@@ -481,6 +484,133 @@ Configure Nautilus/GNOME Files with GTK bookmarks and custom folder icons.
 
 ---
 
+## NixOS Modules
+
+Import modules via `inputs.mix-nix.nixosModules.<name>`.
+
+<details>
+<summary><strong>newt</strong> - Pangolin Docker tunnel client</summary>
+
+### newt
+
+Runs Newt in a Docker container for Pangolin tunneling with full Docker socket access, enabling container network validation and orchestration features.
+
+> **Note:** This module disables the upstream native `services.networking.newt` module to avoid conflicts. Use upstream if you prefer a native (non-Docker) approach.
+
+#### Options
+
+| Option                           | Type               | Default        | Description                                       |
+| -------------------------------- | ------------------ | -------------- | ------------------------------------------------- |
+| `services.newt.enable`           | `bool`             | `false`        | Enable Newt Docker container service              |
+| `services.newt.id`               | `string`           | required       | Newt ID for authentication with Pangolin server   |
+| `services.newt.secret`           | `null` \| `string` | `null`         | Plaintext secret (not recommended for production) |
+| `services.newt.secretFile`       | `null` \| `path`   | `null`         | Path to env file containing `NEWT_SECRET=...`     |
+| `services.newt.image`            | `string`           | `"fosrl/newt"` | Docker image to use                               |
+| `services.newt.pangolinEndpoint` | `string`           | required       | Pangolin server endpoint URL                      |
+| `services.newt.networkName`      | `string`           | `"newt"`       | Docker network name for container communication   |
+| `services.newt.networkAlias`     | `string`           | `"newt"`       | Network alias for the container                   |
+| `services.newt.useHostNetwork`   | `bool`             | `false`        | Use host networking (disables network validation) |
+| `services.newt.extraNetworks`    | `listOf string`    | `[]`           | Additional Docker networks to connect to          |
+
+> **Authentication:** Either `secret` or `secretFile` must be set, but not both. Use `secretFile` with sops-nix or agenix for production.
+
+#### Usage Example
+
+```nix
+{ config, ... }:
+{
+  imports = [ inputs.mix-nix.nixosModules.newt ];
+
+  services.newt = {
+    enable = true;
+    id = "your-newt-id";
+    secretFile = config.sops.secrets.newt-secret.path;
+    pangolinEndpoint = "https://pangolin.example.com";
+
+    # Optional: connect to additional networks
+    extraNetworks = [ "traefik" ];
+  };
+}
+```
+
+</details>
+
+<details>
+<summary><strong>olm</strong> - Pangolin native tunnel client</summary>
+
+### olm
+
+Native OLM binary for WireGuard-based Pangolin tunneling. Connects your machine directly to Pangolin/Newt sites without Docker.
+
+#### Core Options
+
+| Option                    | Type               | Default  | Description                                |
+| ------------------------- | ------------------ | -------- | ------------------------------------------ |
+| `services.olm.enable`     | `bool`             | `false`  | Enable OLM tunneling client                |
+| `services.olm.autoStart`  | `bool`             | `false`  | Start automatically at boot                |
+| `services.olm.id`         | `string`           | required | OLM client identifier                      |
+| `services.olm.secret`     | `null` \| `string` | `null`   | Plaintext secret (not recommended)         |
+| `services.olm.secretFile` | `null` \| `path`   | `null`   | Path to file containing the secret         |
+| `services.olm.endpoint`   | `string`           | required | Pangolin endpoint URL                      |
+| `services.olm.configFile` | `null` \| `path`   | `null`   | Config file path (overrides other options) |
+
+#### Network Options
+
+| Option                       | Type               | Default  | Description                              |
+| ---------------------------- | ------------------ | -------- | ---------------------------------------- |
+| `services.olm.endpointIP`    | `null` \| `string` | `null`   | Direct IP to bypass DNS/proxy            |
+| `services.olm.mtu`           | `int`              | `1280`   | Network interface MTU                    |
+| `services.olm.dns`           | `null` \| `string` | `null`   | DNS server (uses system default if null) |
+| `services.olm.interfaceName` | `string`           | `"olm0"` | WireGuard interface name                 |
+| `services.olm.holepunch`     | `bool`             | `false`  | Enable NAT traversal (experimental)      |
+
+#### Connection Options
+
+| Option                      | Type             | Default  | Description                         |
+| --------------------------- | ---------------- | -------- | ----------------------------------- |
+| `services.olm.logLevel`     | `enum`           | `"INFO"` | DEBUG, INFO, WARN, ERROR, or FATAL  |
+| `services.olm.pingInterval` | `string`         | `"3s"`   | Server ping frequency               |
+| `services.olm.pingTimeout`  | `string`         | `"5s"`   | Ping response timeout               |
+| `services.olm.healthFile`   | `null` \| `path` | `null`   | Path for connection status tracking |
+
+#### Desktop Integration
+
+| Option                               | Type      | Default           | Description                     |
+| ------------------------------------ | --------- | ----------------- | ------------------------------- |
+| `services.olm.package`               | `package` | `pkgs.fosrl-olm`  | OLM package to use              |
+| `services.olm.enableGnomeExtension`  | `bool`    | `false`           | Enable GNOME Shell panel toggle |
+| `services.olm.gnomeExtensionPackage` | `package` | `pkgs.olm-toggle` | GNOME extension package         |
+
+> **Authentication:** One of `secret`, `secretFile`, or `configFile` must be set. Use `secretFile` with sops-nix or agenix for production.
+
+#### Usage Example
+
+```nix
+{ config, ... }:
+{
+  imports = [ inputs.mix-nix.nixosModules.olm ];
+
+  services.olm = {
+    enable = true;
+    autoStart = false;  # Manual control via systemctl
+    id = "your-olm-id";
+    secretFile = config.sops.secrets.olm-secret.path;
+    endpoint = "https://pangolin.example.com";
+
+    # Optional tuning
+    mtu = 1400;
+    logLevel = "DEBUG";
+
+    # Desktop integration
+    enableGnomeExtension = true;
+  };
+}
+```
+
+</details>
+
+---
+
 ## Flake-Parts Modules
 
 Import all modules at once:
@@ -499,16 +629,16 @@ The primary integration point. Define users once, reference them across hosts, a
 
 #### User Options (`mix.users`)
 
-| Option                            | Type                    | Default                       | Description                            |
-| --------------------------------- | ----------------------- | ----------------------------- | -------------------------------------- |
-| `mix.users`                       | `attrsOf userSpec`      | `{}`                          | User definitions                       |
-| `mix.users.<name>.name`           | `string`                | required                      | Username                               |
-| `mix.users.<name>.uid`            | `null` \| `int`         | `null`                        | User ID (null for auto)                |
-| `mix.users.<name>.group`          | `string`                | `"users"`                     | Primary group                          |
-| `mix.users.<name>.shell`          | `package`               | required                      | Default shell                          |
-| `mix.users.<name>.extraGroups`    | `listOf string`         | `["wheel", "networkmanager"]` | Additional groups                      |
-| `mix.users.<name>.home`           | `null` \| `{directory}` | `null`                        | Home Manager config (null disables HM) |
-| `mix.users.<name>.home.directory` | `path`                  | -                             | Path to user's HM config directory     |
+| Option                         | Type                  | Default                       | Description                                   |
+| ------------------------------ | --------------------- | ----------------------------- | --------------------------------------------- |
+| `mix.users`                    | `attrsOf userSpec`    | `{}`                          | User definitions                              |
+| `mix.users.<name>.name`        | `string`              | required                      | Username                                      |
+| `mix.users.<name>.uid`         | `null` \| `int`       | `null`                        | User ID (null for auto)                       |
+| `mix.users.<name>.group`       | `string`              | `"users"`                     | Primary group                                 |
+| `mix.users.<name>.shell`       | `package` \| `string` | required                      | Default shell (package or name like `"fish"`) |
+| `mix.users.<name>.extraGroups` | `listOf string`       | `["wheel", "networkmanager"]` | Additional groups                             |
+
+> **Note:** Home Manager is auto-enabled via `usersHomeDir` discovery. If `<usersHomeDir>/<username>/` or `<usersHomeDir>/<username>.nix` exists, HM is enabled for that user.
 
 #### Host Options (`mix.hosts`)
 
@@ -534,10 +664,29 @@ The primary integration point. Define users once, reference them across hosts, a
 
 #### Directory Auto-Discovery
 
-| Option             | Type             | Default | Description                                                |
-| ------------------ | ---------------- | ------- | ---------------------------------------------------------- |
-| `mix.hostsDir`     | `null` \| `path` | `null`  | Auto-discover NixOS configs from `<hostsDir>/<hostname>/`  |
-| `mix.hostsHomeDir` | `null` \| `path` | `null`  | Auto-discover HM configs from `<hostsHomeDir>/<hostname>/` |
+| Option             | Type             | Default | Description                                                 |
+| ------------------ | ---------------- | ------- | ----------------------------------------------------------- |
+| `mix.hostsDir`     | `null` \| `path` | `null`  | Auto-discover NixOS configs from `<hostsDir>/<hostname>/`   |
+| `mix.hostsHomeDir` | `null` \| `path` | `null`  | Auto-discover HM configs from `<hostsHomeDir>/<hostname>/`  |
+| `mix.usersHomeDir` | `null` \| `path` | `null`  | Auto-discover user HM configs from `<usersHomeDir>/<user>/` |
+
+> **Note:** Home Manager is automatically enabled for a user when their home config path exists (either via `usersHomeDir` auto-discovery or explicit `home.directory`).
+
+#### Flat File Support
+
+Auto-discovery supports **both directory and flat file** layouts:
+
+```
+# Directory style (recommended for complex configs)
+hosts/desktop/default.nix     →  imported as ./hosts/desktop
+home/users/toph/default.nix   →  imported as ./home/users/toph
+
+# Flat file style (simpler for small configs)
+hosts/desktop.nix             →  imported directly
+home/users/toph.nix           →  imported directly
+```
+
+The lookup order is: directory first, then flat file.
 
 #### How Module Import Works
 
@@ -546,11 +695,11 @@ The primary integration point. Define users once, reference them across hosts, a
 For example, with this configuration:
 ```nix
 mix = {
-  coreModules = [ ./modules/core ];           # Imports ./modules/core/default.nix
-  coreHomeModules = [ ./home/core ];          # Imports ./home/core/default.nix
-  hostsDir = ./hosts;                          # Imports ./hosts/<hostname>/default.nix
-  hostsHomeDir = ./home/hosts;                 # Imports ./home/hosts/<hostname>/default.nix
-  users.toph.home.directory = ./home/users/toph;  # Imports ./home/users/toph/default.nix
+  coreModules = [ ./modules/core ];    # Imports ./modules/core/default.nix
+  coreHomeModules = [ ./home/core ];   # Imports ./home/core/default.nix
+  hostsDir = ./hosts;                  # Imports ./hosts/<hostname>/ or ./hosts/<hostname>.nix
+  hostsHomeDir = ./home/hosts;         # Imports ./home/hosts/<hostname>/ or .nix
+  usersHomeDir = ./home/users;         # Imports ./home/users/<username>/ or .nix (enables HM)
 };
 ```
 
@@ -646,17 +795,20 @@ When using `mix.hosts`, these are available in your NixOS and Home Manager modul
     hostsDir = ./hosts;
     hostsHomeDir = ./home/hosts;
 
+    # Auto-discover user HM configs from ./home/users/<username>/
+    usersHomeDir = ./home/users;
+
     users = {
       toph = {
         name = "toph";
         uid = 1000;
         shell = pkgs.fish;
-        home.directory = ./home/users/toph;  # Enables HM
+        # HM enabled via usersHomeDir auto-discovery (./home/users/toph/)
       };
       admin = {
         name = "admin";
         shell = pkgs.bash;
-        # No home = system user only, no Home Manager
+        # No ./home/users/admin/ = system user only, no Home Manager
       };
     };
 
@@ -782,12 +934,23 @@ environment.systemPackages = [ pkgs.stable.firefox pkgs.unstable.neovim ];
 
 Custom packages built by mix.nix.
 
+| Package                | Description                                           |
+| ---------------------- | ----------------------------------------------------- |
+| `eden`                 | Nintendo Switch video game console emulator           |
+| `eightbitdo-updater`   | 8BitDo controller firmware updater                    |
+| `journey`              | Cross-platform journal app                            |
+| `monocraft-nerd-fonts` | Minecraft-style monospace font with Nerd Font icons   |
+| `olm-toggle`           | GNOME Shell extension to toggle OLM tunneling service |
+| `procon2-init`         | Nintendo Switch 2 Pro Controller USB initializer      |
+| `proton-cachyos`       | CachyOS Proton build with optimizations               |
+| `wiiu-downloader`      | GUI to download Wii U content from Nintendo servers   |
+
 ```bash
 # List available packages
 nix flake show github:tophc7/mix.nix
 
 # Build a package
-nix build github:tophc7/mix.nix#packageName
+nix build github:tophc7/mix.nix#proton-cachyos
 ```
 
 </details>
@@ -842,7 +1005,8 @@ lib.mkFlake {
   coreModules ? [];          # Optional: NixOS modules for all hosts
   coreHomeModules ? [];      # Optional: HM modules for all users
   hostsDir ? null;           # Optional: auto-discover NixOS configs
-  hostsHomeDir ? null;       # Optional: auto-discover HM configs
+  hostsHomeDir ? null;       # Optional: auto-discover host HM configs
+  usersHomeDir ? null;       # Optional: auto-discover user HM configs
   homeManager ? null;        # Optional: home-manager input
 }
 ```
@@ -858,17 +1022,68 @@ Types and builders for declarative configurations.
 - `mkHost {...}` - Build single nixosConfiguration
 - `mkHosts {...}` - Build multiple nixosConfigurations
 
+> **Note:** The `shell` option in userSpec accepts either a `package` or a `string` (e.g., `pkgs.fish` or `"fish"`).
+
+### lib.infra.containers - Docker Container Utilities
+
+Utilities for OCI container management with systemd integration. Used internally by the `newt` module, but available for building custom container services.
+
+- `serviceDefaults` - Default systemd service config for containers (restart policies)
+- `mkDockerNetwork { pkgs, name, driver? }` - Create Docker network management service
+- `mkContainerTarget { name, description? }` - Create systemd orchestration target
+- `mkNetworkOptions { useHostNetwork, networkName, networkAlias, extraNetworks? }` - Generate Docker CLI network options
+
+#### Usage Example
+
+```nix
+{ lib, pkgs, ... }:
+{
+  # Create a Docker network service
+  systemd.services = lib.infra.containers.mkDockerNetwork {
+    inherit pkgs;
+    name = "myapp";
+  };
+
+  # Create orchestration target
+  systemd.targets = lib.infra.containers.mkContainerTarget {
+    name = "myapp";
+    description = "My application stack";
+  };
+
+  # Use in container definitions
+  virtualisation.oci-containers.containers.myapp = {
+    # ...
+    extraOptions = lib.infra.containers.mkNetworkOptions {
+      networkName = "myapp";
+      networkAlias = "myapp";
+      extraNetworks = [ "traefik" ];
+    };
+  };
+
+  # Apply service defaults
+  systemd.services."docker-myapp".serviceConfig = lib.infra.containers.serviceDefaults;
+}
+```
+
 ### lib.desktop - Desktop Utilities
 
 - `mkWineApp pkgs {...}` - Create Wine application wrapper with isolated prefix
 - `matugen.mkBase16Template {...}` - Generate base16 template for matugen
 - `matugen.mkTemplateConfig {...}` - Generate matugen template config
 - `matugen.mkDerivation {...}` - Build matugen derivation
-- `monitors.findPrimary monitors` - Find primary monitor
-- `monitors.filterEnabled monitors` - Filter enabled monitors
-- `monitors.totalWidth monitors` - Calculate total width
-- `monitors.totalHeight monitors` - Calculate max height
-- 
+- `monitors.findPrimary monitors` - Find primary monitor from list
+- `monitors.findByName name monitors` - Find monitor by output name (e.g., "DP-1")
+- `monitors.filterEnabled monitors` - Filter to only enabled monitors
+- `monitors.countPrimary monitors` - Count monitors marked as primary (for validation)
+- `monitors.getDefaults monitors` - Get primary monitor settings with fallbacks `{ width, height, refreshRate, vrr, hdr }`
+- `monitors.effectiveWidth monitor` - Get width accounting for rotation
+- `monitors.effectiveHeight monitor` - Get height accounting for rotation
+- `monitors.isPortrait monitor` - Check if rotated 90/270 degrees
+- `monitors.toResolutionStr monitor` - Format as "WIDTHxHEIGHT@RATE"
+- `monitors.toPositionStr monitor` - Format position as "Xx Y"
+- `monitors.totalWidth monitors` - Calculate total width of enabled monitors (scaled)
+- `monitors.totalHeight monitors` - Calculate max height of enabled monitors (scaled)
+
 ### lib.secrets - Secrets Management
 
 - `load {path, gitattributes, ...}` - Import secrets with git-crypt validation
@@ -931,6 +1146,7 @@ Complete flake.nix showing typical usage:
         # Auto-discovery directories
         hostsDir = ./hosts;
         hostsHomeDir = ./home/hosts;
+        usersHomeDir = ./home/users;  # HM enabled if ./home/users/<username>/ exists
 
         # User definitions
         users.toph = {
@@ -938,7 +1154,7 @@ Complete flake.nix showing typical usage:
           uid = 1000;
           shell = pkgs.fish;
           extraGroups = [ "wheel" "docker" "audio" "video" ];
-          home.directory = ./home/users/toph;
+          # HM auto-enabled via usersHomeDir (./home/users/toph/)
         };
 
         # Host definitions
@@ -961,30 +1177,62 @@ Complete flake.nix showing typical usage:
 }
 ```
 
-**Directory structure recommendation:**
+
+**Directory structure (directories - complex configs):**
 ```
 .
 ├── flake.nix
-├── secrets.nix         # git-crypt encrypted
-├── .gitattributes      # secrets.nix filter=git-crypt
+├── secrets.nix               # git-crypt encrypted
+├── .gitattributes            # secrets.nix filter=git-crypt
 ├── modules/
-│   ├── core/           # Essential NixOS modules (applied to all)
-│   │   ├── home/       # Core HM modules
-│   │   └── host/       # Core NixOS modules
-│   └── common/         # Optional shared modules
-│       ├── home/
-│       └── host/
+│   ├── home/
+│   │   ├── core/
+│   │   │   └── default.nix   # Core HM modules (applied to all)
+│   │   └── common/
+│   │       └── default.nix   # Optional shared HM modules
+│   └── host/
+│       ├── core/
+│       │   └── default.nix   # Core NixOS modules (applied to all)
+│       └── common/
+│           └── default.nix   # Optional shared NixOS modules
 ├── hosts/
-│   ├── desktop/        # Auto-imported for 'desktop' host
+│   ├── desktop/
+│   │   └── default.nix       # NixOS config for 'desktop' host
 │   ├── laptop/
+│   │   └── default.nix
 │   └── homelab/
+│       └── default.nix
 └── home/
     ├── users/
-    │   └── toph/       # User-specific HM config
+    │   └── toph/
+    │       └── default.nix   # User-specific HM config (enables HM)
     └── hosts/
-        ├── desktop/    # Host-specific HM config
+        ├── desktop/
+        │   └── default.nix   # Host-specific HM config
         ├── laptop/
+        │   └── default.nix
         └── homelab/
+            └── default.nix
+```
+
+**Directory structure (flat files - simpler):**
+```
+.
+├── flake.nix
+├── secrets.nix           # git-crypt encrypted
+├── home/
+│   ├── core.nix          # Core HM modules
+│   ├── hosts/
+│   │   ├── desktop.nix   # Host-specific HM config
+│   │   └── server.nix
+│   └── users/
+│       └── toph.nix      # User-specific HM config (enables HM)
+├── hosts/
+│   ├── desktop.nix       # NixOS config for desktop
+│   └── server.nix        # NixOS config for server
+└── modules/
+    ├── core.nix          # Core NixOS modules
+    └── secrets.nix       # git-crypt encrypted
 ```
 
 ---
