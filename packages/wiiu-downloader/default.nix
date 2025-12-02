@@ -54,6 +54,9 @@ buildGoModule rec {
   # The main package is in cmd/WiiUDownloader
   subPackages = [ "cmd/WiiUDownloader" ];
 
+  # Skip tests - they're extremely slow
+  doCheck = false;
+
   # Install desktop file
   postInstall = ''
     mkdir -p $out/share/applications
