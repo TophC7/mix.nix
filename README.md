@@ -943,7 +943,7 @@ Custom packages built by mix.nix.
 | `olm-toggle`           | GNOME Shell extension to toggle OLM tunneling service |
 | `procon2-init`         | Nintendo Switch 2 Pro Controller USB initializer      |
 | `proton-cachyos`       | CachyOS Proton build with optimizations               |
-| `wiiu-downloader`      | GUI to download Wii U content from Nintendo servers   |
+| `WiiUDownloader`       | GUI to download Wii U content from Nintendo servers   |
 
 ```bash
 # List available packages

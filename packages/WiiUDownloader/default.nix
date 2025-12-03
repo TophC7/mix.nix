@@ -16,7 +16,7 @@ let
   db-go = ./db.go;
 in
 buildGoModule rec {
-  pname = "wiiu-downloader";
+  pname = "WiiUDownloader";
   version = "2.68";
 
   src = fetchFromGitHub {
@@ -60,7 +60,7 @@ buildGoModule rec {
   # Install desktop file
   postInstall = ''
     mkdir -p $out/share/applications
-    cat > $out/share/applications/wiiudownloader.desktop << EOF
+    cat > $out/share/applications/WiiUDownloader.desktop << EOF
     [Desktop Entry]
     Name=WiiU Downloader
     Comment=Download Wii U games, updates, DLC, and demos from Nintendo's servers
