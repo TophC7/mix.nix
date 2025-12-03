@@ -144,19 +144,22 @@ in
       log-driver = "journald";
       user = "root:root";
 
-      extraOptions = [
-        "--privileged"
-        "--cap-add=NET_ADMIN"
-        "--cap-add=SYS_MODULE"
-      ]
-      ++ containers.mkNetworkOptions {
-        inherit (cfg)
-          useHostNetwork
-          networkName
-          networkAlias
-          extraNetworks
-          ;
-      };
+      extraOptions =
+        [
+          "--privileged"
+          "--cap-add=NET_ADMIN"
+          "--cap-add=SYS_MODULE"
+        ]
+        ++ (
+          if cfg.useHostNetwork then
+            [ "--network=host" ]
+          else
+            [
+              "--network=${cfg.networkName}"
+              "--network-alias=${cfg.networkAlias}"
+            ]
+            ++ (map (net: "--network=${net}") cfg.extraNetworks)
+        );
     };
 
     # Container service configuration
@@ -173,23 +176,24 @@ in
     };
 
     # Docker network service (bridge mode only)
-    systemd.services = mkIf (!cfg.useHostNetwork) (
-      containers.mkDockerNetwork {
-        inherit pkgs;
-        name = cfg.networkName;
-      }
-      // {
-        "docker-network-${cfg.networkName}" = {
-          partOf = [ "docker-newt-root.target" ];
-          wantedBy = [ "docker-newt-root.target" ];
-        };
-      }
-    );
+    systemd.services."docker-network-${cfg.networkName}" = mkIf (!cfg.useHostNetwork) {
+      path = [ pkgs.docker ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStop = "${pkgs.docker}/bin/docker network rm -f ${cfg.networkName}";
+      };
+      script = ''
+        docker network inspect ${cfg.networkName} || docker network create --driver bridge ${cfg.networkName}
+      '';
+      partOf = [ "docker-newt-root.target" ];
+      wantedBy = [ "docker-newt-root.target" ];
+    };
 
     # Root target for orchestration
-    systemd.targets = containers.mkContainerTarget {
-      name = "newt";
-      description = "Newt Pangolin tunnel container stack";
+    systemd.targets."docker-newt-root" = {
+      unitConfig.Description = "Newt Pangolin tunnel container stack";
+      wantedBy = [ "multi-user.target" ];
     };
   };
 }
