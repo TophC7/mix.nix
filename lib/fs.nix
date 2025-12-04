@@ -1,25 +1,14 @@
 # Filesystem utilities
 # Helpers for scanning directories, importing modules, etc.
+#
+# Naming convention:
+#   scan*  = filesystem scan only, returns paths (no import/evaluation)
+#   import* = imports and evaluates files with provided args
+#
 { lib }:
 {
-  # Scan and import all modules from a directory
-  # Each module receives the provided args
-  #
-  # Usage:
-  #   modules = lib.fs.importAll ./modules { inherit pkgs; };
-  importAll =
-    path: args:
-    builtins.map (f: import (path + "/${f}") args) (
-      builtins.attrNames (
-        lib.attrsets.filterAttrs (
-          name: type:
-          (type == "directory") || ((name != "default.nix") && (lib.strings.hasSuffix ".nix" name))
-        ) (builtins.readDir path)
-      )
-    );
-
   # Scan directory, import all modules, and merge their attrsets
-  # Perfect for packages/ and overrides/ patterns
+  # Perfect for lib/ subdirectories that export attrsets
   #
   # Usage:
   #   allPackages = lib.fs.importAndMerge ./packages { inherit pkgs; };
@@ -84,17 +73,38 @@
       ) (builtins.readDir path)
     );
 
-  # Scan directory and return attrset of named modules
+  # Scan directory and return attrset of paths (no import)
   # Keys are derived from filenames (without .nix extension)
-  # Perfect for NixOS/Home Manager module indices
+  # Perfect for NixOS/Home Manager module indices where the module
+  # system handles importing and calling with { config, lib, pkgs, ... }
   #
   # Usage:
-  #   modules = lib.fs.scanModules ./. { inherit inputs; };
-  #   # Returns: { colors = <module>; gtk-theme = <module>; cursor = <module>; }
+  #   nixosModules = lib.fs.scanAttrs ./.;
+  #   # Returns: { oci-stacks = ./oci-stacks.nix; newt = ./newt.nix; }
+  scanAttrs =
+    path:
+    let
+      entries = lib.attrsets.filterAttrs (
+        name: type:
+        (type == "directory") || ((name != "default.nix") && (lib.strings.hasSuffix ".nix" name))
+      ) (builtins.readDir path);
+
+      toAttrName =
+        name: if lib.strings.hasSuffix ".nix" name then lib.strings.removeSuffix ".nix" name else name;
+    in
+    lib.mapAttrs' (name: _type: {
+      name = toAttrName name;
+      value = path + "/${name}";
+    }) entries;
+
+  # Import all files and return attrset of evaluated results
+  # Keys are derived from filenames (without .nix extension)
+  # Each file is imported and called with the provided args
   #
-  # Combined with default:
-  #   lib.fs.scanModules ./. args // { default = ...; }
-  scanModules =
+  # Usage:
+  #   modules = lib.fs.importAttrs ./. { inherit lib; };
+  #   # Returns: { colors = <evaluated>; theme = <evaluated>; }
+  importAttrs =
     path: args:
     let
       entries = lib.attrsets.filterAttrs (
@@ -102,7 +112,6 @@
         (type == "directory") || ((name != "default.nix") && (lib.strings.hasSuffix ".nix" name))
       ) (builtins.readDir path);
 
-      # Convert filename to clean attribute name
       toAttrName =
         name: if lib.strings.hasSuffix ".nix" name then lib.strings.removeSuffix ".nix" name else name;
     in
