@@ -1,17 +1,17 @@
 # Flake-parts module for NixOS and Home Manager modules
-{ inputs, lib, ... }:
+{ lib, ... }:
 
 {
   flake = {
     # NixOS modules - import selectively in your configuration:
-    #   imports = [ myLib.nixosModules.containers ];
+    #   imports = [ inputs.mix-nix.nixosModules.oci-stacks ];
     #
     # Or import all with:
-    #   imports = [ myLib.nixosModules.default ];
-    nixosModules = import ../modules/nixos { inherit inputs lib; };
+    #   imports = [ inputs.mix-nix.nixosModules.default ];
+    nixosModules = import ../modules/nixos { inherit lib; };
 
     # Home Manager modules - same pattern:
-    #   imports = [ myLib.homeManagerModules.colors ];
-    homeManagerModules = import ../modules/home-manager { inherit inputs lib; };
+    #   imports = [ inputs.mix-nix.homeManagerModules.fastfetch ];
+    homeManagerModules = import ../modules/home-manager { inherit lib; };
   };
 }

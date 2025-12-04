@@ -1,15 +1,16 @@
 # NixOS modules index
-# All modules are auto-discovered and exposed as individual attributes
+# All modules are auto-discovered and exposed as paths
 #
 # Usage (individual):
-#   imports = [ inputs.lib-nix.nixosModules.containers ];
+#   imports = [ inputs.mix-nix.nixosModules.oci-stacks ];
 #
 # Usage (all at once):
-#   imports = [ inputs.lib-nix.nixosModules.default ];
-{ inputs, lib, ... }:
+#   imports = [ inputs.mix-nix.nixosModules.default ];
+#
+# Note: Modules using lib.infra.* require the extended lib via specialArgs
+{ lib, ... }:
 
-# Auto-discover all modules as named attributes + default for importing all
-lib.fs.scanModules ./. { inherit inputs; }
+lib.fs.scanAttrs ./.
 // {
   default =
     { ... }:
