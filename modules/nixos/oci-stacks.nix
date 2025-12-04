@@ -21,18 +21,13 @@
   config,
   lib,
   pkgs,
-  options,
   ...
 }:
 
 with lib;
 
 let
-  cfg = config.virtualisation.oci-stacks;
   containers = lib.infra.containers;
-
-  # Get the container submodule type from oci-containers
-  containerType = options.virtualisation.oci-containers.containers.type.nestedTypes.elemType;
 
   # Network submodule for full configuration
   networkSubmodule = types.submodule {
@@ -117,11 +112,12 @@ let
     {
       options = {
         containers = mkOption {
-          type = types.attrsOf containerType;
+          type = types.attrsOf types.attrs;
           default = { };
           description = ''
             Container definitions. These are passed through to
             virtualisation.oci-containers.containers with orchestration added.
+            Type validation is handled by oci-containers module.
           '';
         };
 
@@ -163,61 +159,59 @@ let
           ${net.name}
       '';
 
-  # Generate configuration for a single stack
-  mkStackConfig =
+  # Generate systemd services for a single stack
+  mkStackServices =
     stackName: stackCfg:
     let
       net = normalizeNetwork stackName stackCfg.network;
       targetName = "docker-compose-${stackName}-root";
       containerNames = attrNames stackCfg.containers;
-
-      # External network service names
       externalNetServices = map (n: "docker-network-${n}.service") net.external;
     in
+    # Container service extensions
+    listToAttrs (
+      map (containerName: {
+        name = "docker-${containerName}";
+        value = {
+          serviceConfig = containers.serviceDefaults;
+          after = [ "docker-network-${net.name}.service" ] ++ externalNetServices;
+          requires = [ "docker-network-${net.name}.service" ];
+          wants = externalNetServices;
+          partOf = [ "${targetName}.target" ];
+          wantedBy = [ "${targetName}.target" ];
+        };
+      }) containerNames
+    )
+    // {
+      # Network service
+      "docker-network-${net.name}" = {
+        path = [ pkgs.docker ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStop = "${pkgs.docker}/bin/docker network rm -f ${net.name}";
+        };
+        script = mkNetworkScript net;
+        partOf = [ "${targetName}.target" ];
+        wantedBy = [ "${targetName}.target" ];
+      };
+    };
+
+  # Generate systemd target for a single stack
+  mkStackTarget =
+    stackName: stackCfg:
+    let
+      targetName = "docker-compose-${stackName}-root";
+    in
     {
-      # Passthrough containers to oci-containers
-      virtualisation.oci-containers.containers = stackCfg.containers;
-
-      # Extend each container's systemd service
-      systemd.services = (
-        listToAttrs (
-          map (containerName: {
-            name = "docker-${containerName}";
-            value = {
-              serviceConfig = containers.serviceDefaults;
-              after = [ "docker-network-${net.name}.service" ] ++ externalNetServices;
-              requires = [ "docker-network-${net.name}.service" ];
-              wants = externalNetServices;
-              partOf = [ "${targetName}.target" ];
-              wantedBy = [ "${targetName}.target" ];
-            };
-          }) containerNames
-        )
-        // {
-          # Network service
-          "docker-network-${net.name}" = {
-            path = [ pkgs.docker ];
-            serviceConfig = {
-              Type = "oneshot";
-              RemainAfterExit = true;
-              ExecStop = "${pkgs.docker}/bin/docker network rm -f ${net.name}";
-            };
-            script = mkNetworkScript net;
-            partOf = [ "${targetName}.target" ];
-            wantedBy = [ "${targetName}.target" ];
-          };
-        }
-      );
-
-      # Root target
-      systemd.targets."${targetName}" = {
+      "${targetName}" = {
         unitConfig.Description = stackCfg.description or "OCI stack: ${stackName}";
         wantedBy = [ "multi-user.target" ];
       };
     };
 
-  # Merge all stack configs
-  allStackConfigs = mapAttrsToList mkStackConfig cfg;
+  # Reference to our config (evaluated lazily per-path)
+  cfg = config.virtualisation.oci-stacks;
 
 in
 {
@@ -251,5 +245,15 @@ in
     '';
   };
 
-  config = mkIf (cfg != { }) (mkMerge allStackConfigs);
+  # Each path is a separate lazy thunk - avoids forcing full cfg evaluation upfront
+  config = {
+    # Passthrough all containers to oci-containers
+    virtualisation.oci-containers.containers = lib.concatMapAttrs (_name: stack: stack.containers) cfg;
+
+    # Generate services for each stack (merged via concatMapAttrs)
+    systemd.services = lib.concatMapAttrs mkStackServices cfg;
+
+    # Generate targets for each stack
+    systemd.targets = lib.concatMapAttrs mkStackTarget cfg;
+  };
 }
