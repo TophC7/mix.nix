@@ -19,6 +19,7 @@
 - [NixOS Modules](#nixos-modules)
   - [newt](#newt)
   - [olm](#olm)
+  - [oci-stacks](#oci-stacks)
 - [Flake-Parts Modules](#flake-parts-modules)
   - [hosts](#hosts)
   - [secrets](#secrets)
@@ -609,6 +610,102 @@ Native OLM binary for WireGuard-based Pangolin tunneling. Connects your machine 
 
 </details>
 
+<details>
+<summary><strong>oci-stacks</strong> - OCI container stack orchestration</summary>
+
+### oci-stacks
+
+Abstracts Docker container orchestration boilerplate by generating network services, systemd service configuration, and root targets from simple stack definitions.
+
+> **Note:** Modules using `lib.infra.*` require the extended lib via `specialArgs` in `nixosSystem`.
+
+#### Options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `virtualisation.oci-stacks` | `attrsOf stackType` | `{}` | OCI container stack definitions |
+| `virtualisation.oci-stacks.<name>.containers` | `attrsOf attrs` | `{}` | Container definitions (passed to `oci-containers`) |
+| `virtualisation.oci-stacks.<name>.network` | `string` \| `submodule` | stack name | Network configuration |
+| `virtualisation.oci-stacks.<name>.description` | `null` \| `string` | `null` | Description for the systemd root target |
+
+#### Network Options
+
+When `network` is an attrset instead of a string:
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `network.name` | `null` \| `string` | stack name | Network name |
+| `network.driver` | `string` | `"bridge"` | Docker network driver |
+| `network.subnet` | `null` \| `string` | `null` | Network subnet (e.g., `"10.1.1.0/24"`) |
+| `network.gateway` | `null` \| `string` | `null` | Network gateway IP |
+| `network.script` | `null` \| `lines` | `null` | Custom network creation script |
+| `network.external` | `listOf string` | `[]` | External networks (soft dependencies from other stacks) |
+
+#### What It Generates
+
+For each stack, the module automatically creates:
+- **Containers** passed through to `virtualisation.oci-containers`
+- **Network service** (`docker-network-<name>`) with automatic creation/cleanup
+- **Container services** with restart policies via `lib.infra.containers.serviceDefaults`
+- **Network dependencies** wired between containers and networks
+- **Root systemd target** (`docker-compose-<name>-root`) for orchestration
+
+#### Usage Example
+
+```nix
+{ config, ... }:
+{
+  imports = [ inputs.mix-nix.nixosModules.oci-stacks ];
+
+  virtualisation.oci-stacks.myapp = {
+    containers.myapp = {
+      image = "myapp:latest";
+      ports = [ "8080:80" ];
+      extraOptions = [
+        "--network=myapp"
+        "--network-alias=myapp"
+      ];
+    };
+    description = "My application stack";
+  };
+
+  # With custom network configuration
+  virtualisation.oci-stacks.database = {
+    containers.postgres = {
+      image = "postgres:16";
+      extraOptions = [
+        "--network=database"
+        "--network-alias=db"
+      ];
+      environment = {
+        POSTGRES_PASSWORD = "secret";
+      };
+    };
+    network = {
+      name = "database";
+      subnet = "10.1.1.0/24";
+      gateway = "10.1.1.1";
+    };
+  };
+
+  # Stack depending on external network
+  virtualisation.oci-stacks.webapp = {
+    containers.web = {
+      image = "nginx:latest";
+      extraOptions = [
+        "--network=webapp"
+        "--network=database"  # Connect to database network
+      ];
+    };
+    network = {
+      external = [ "database" ];  # Soft dependency on database network
+    };
+  };
+}
+```
+
+</details>
+
 ---
 
 ## Flake-Parts Modules
@@ -986,11 +1083,12 @@ Internal utilities for direct use. Access via the extended `lib`.
 
 Directory scanning and module auto-discovery.
 
-- `scanPaths path` - List importable files (directories + .nix, excluding default.nix)
-- `scanNames path` - List filenames only (without full paths)
-- `importAll path args` - Import all modules, return list
-- `importAndMerge path args` - Import and recursively merge attrsets
-- `scanModules path args` - Import as named attrset `{name = module; ...}`
+- `scanPaths path` - Returns paths to all importable modules (directories + .nix, excluding default.nix)
+- `scanNames path` - Returns just filenames (not full paths)
+- `scanAttrs path` - Returns attrset of `{ name = ./path; }` for module indices
+- `importAndMerge path args` - Import all files and merge their attrsets
+- `importAttrs path args` - Import all and return attrset of evaluated results
+- `relativeTo basePath` - Curried path resolver for composability with map
 
 ### lib.mkFlake - Standalone Flake Builder
 
@@ -1026,41 +1124,18 @@ Types and builders for declarative configurations.
 
 ### lib.infra.containers - Docker Container Utilities
 
-Utilities for OCI container management with systemd integration. Used internally by the `newt` module, but available for building custom container services.
+Utilities for OCI container management with systemd integration.
 
-- `serviceDefaults` - Default systemd service config for containers (restart policies)
-- `mkDockerNetwork { pkgs, name, driver? }` - Create Docker network management service
-- `mkContainerTarget { name, description? }` - Create systemd orchestration target
-- `mkNetworkOptions { useHostNetwork, networkName, networkAlias, extraNetworks? }` - Generate Docker CLI network options
+- `serviceDefaults` - Default systemd service config for containers (restart policies, timing)
+
+For full container stack orchestration (networks, targets, dependencies), use the [`oci-stacks` module](#oci-stacks) instead.
 
 #### Usage Example
 
 ```nix
-{ lib, pkgs, ... }:
+{ lib, ... }:
 {
-  # Create a Docker network service
-  systemd.services = lib.infra.containers.mkDockerNetwork {
-    inherit pkgs;
-    name = "myapp";
-  };
-
-  # Create orchestration target
-  systemd.targets = lib.infra.containers.mkContainerTarget {
-    name = "myapp";
-    description = "My application stack";
-  };
-
-  # Use in container definitions
-  virtualisation.oci-containers.containers.myapp = {
-    # ...
-    extraOptions = lib.infra.containers.mkNetworkOptions {
-      networkName = "myapp";
-      networkAlias = "myapp";
-      extraNetworks = [ "traefik" ];
-    };
-  };
-
-  # Apply service defaults
+  # Apply service defaults to a container service
   systemd.services."docker-myapp".serviceConfig = lib.infra.containers.serviceDefaults;
 }
 ```
