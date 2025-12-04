@@ -127,6 +127,7 @@ in
         "/var/run/docker.sock"
         "--accept-clients"
         "true"
+        "--native"
       ]
       ++ optionals (cfg.secret != null) [
         "--secret"
@@ -144,22 +145,21 @@ in
       log-driver = "journald";
       user = "root:root";
 
-      extraOptions =
-        [
-          "--privileged"
-          "--cap-add=NET_ADMIN"
-          "--cap-add=SYS_MODULE"
-        ]
-        ++ (
-          if cfg.useHostNetwork then
-            [ "--network=host" ]
-          else
-            [
-              "--network=${cfg.networkName}"
-              "--network-alias=${cfg.networkAlias}"
-            ]
-            ++ (map (net: "--network=${net}") cfg.extraNetworks)
-        );
+      extraOptions = [
+        "--privileged"
+        "--cap-add=NET_ADMIN"
+        "--cap-add=SYS_MODULE"
+      ]
+      ++ (
+        if cfg.useHostNetwork then
+          [ "--network=host" ]
+        else
+          [
+            "--network=${cfg.networkName}"
+            "--network-alias=${cfg.networkAlias}"
+          ]
+          ++ (map (net: "--network=${net}") cfg.extraNetworks)
+      );
     };
 
     # Container service configuration
