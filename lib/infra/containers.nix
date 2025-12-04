@@ -8,16 +8,20 @@
 with lib;
 
 {
-  # Default systemd service configuration for containers
-  # Provides sensible restart policies and timing
-  #
-  # Usage:
-  #   systemd.services."docker-foo".serviceConfig = lib.infra.containers.serviceDefaults;
-  #
-  serviceDefaults = {
-    Restart = mkOverride 90 "always";
-    RestartMaxDelaySec = mkOverride 90 "1m";
-    RestartSec = mkOverride 90 "100ms";
-    RestartSteps = mkOverride 90 9;
+  # Container utilities namespace
+  containers = {
+    # Default systemd service configuration for containers
+    # Provides sensible restart policies and timing
+    # Uses mkDefault so user-defined values take precedence
+    #
+    # Usage:
+    #   systemd.services."docker-foo".serviceConfig = lib.infra.containers.serviceDefaults;
+    #
+    serviceDefaults = {
+      Restart = mkDefault "always";
+      RestartMaxDelaySec = mkDefault "1m";
+      RestartSec = mkDefault "100ms";
+      RestartSteps = mkDefault 9;
+    };
   };
 }
