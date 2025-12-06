@@ -159,6 +159,16 @@ let
           ${net.name}
       '';
 
+  # Script to ensure network exists, restarting network service if needed
+  mkNetworkEnsureScript =
+    net:
+    pkgs.writeShellScript "ensure-network-${net.name}" ''
+      if ! ${pkgs.docker}/bin/docker network inspect ${net.name} >/dev/null 2>&1; then
+        echo "Network ${net.name} missing, restarting network service..."
+        ${pkgs.systemd}/bin/systemctl restart docker-network-${net.name}.service
+      fi
+    '';
+
   # Generate systemd services for a single stack
   mkStackServices =
     stackName: stackCfg:
@@ -167,15 +177,20 @@ let
       targetName = "docker-compose-${stackName}-root";
       containerNames = attrNames stackCfg.containers;
       externalNetServices = map (n: "docker-network-${n}.service") net.external;
+      networkService = "docker-network-${net.name}.service";
     in
     # Container service extensions
     listToAttrs (
       map (containerName: {
         name = "docker-${containerName}";
         value = {
-          serviceConfig = containers.serviceDefaults;
-          after = [ "docker-network-${net.name}.service" ] ++ externalNetServices;
-          requires = [ "docker-network-${net.name}.service" ];
+          serviceConfig = containers.serviceDefaults // {
+            # Ensure network actually exists before starting container
+            # This handles cases where network disappeared but service is still "active"
+            ExecStartPre = [ "${mkNetworkEnsureScript net}" ];
+          };
+          after = [ networkService ] ++ externalNetServices;
+          requires = [ networkService ];
           wants = externalNetServices;
           partOf = [ "${targetName}.target" ];
           wantedBy = [ "${targetName}.target" ];
@@ -192,6 +207,8 @@ let
           ExecStop = "${pkgs.docker}/bin/docker network rm -f ${net.name}";
         };
         script = mkNetworkScript net;
+        after = [ "docker.service" ];
+        requires = [ "docker.service" ];
         partOf = [ "${targetName}.target" ];
         wantedBy = [ "${targetName}.target" ];
       };
