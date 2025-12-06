@@ -125,8 +125,6 @@ in
         cfg.pangolinEndpoint
         "--docker-socket"
         "/var/run/docker.sock"
-        "--accept-clients"
-        "true"
         "--native"
       ]
       ++ optionals (cfg.secret != null) [
