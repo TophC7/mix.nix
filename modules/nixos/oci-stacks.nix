@@ -17,6 +17,15 @@
 #     # network defaults to stack name
 #   };
 #
+# Host networking (disable network creation):
+#   virtualisation.oci-stacks.myapp = {
+#     network.enable = false;
+#     containers.myapp = {
+#       image = "myapp:latest";
+#       extraOptions = [ "--network=host" ];
+#     };
+#   };
+#
 {
   config,
   lib,
@@ -32,6 +41,16 @@ let
   # Network submodule for full configuration
   networkSubmodule = types.submodule {
     options = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Whether to create a Docker network for this stack.
+          Set to false for containers using host networking or other modes
+          that don't require a dedicated stack network.
+        '';
+      };
+
       name = mkOption {
         type = types.nullOr types.str;
         default = null;
@@ -87,6 +106,7 @@ let
     stackName: net:
     if builtins.isString net then
       {
+        enable = true;
         name = net;
         driver = "bridge";
         subnet = null;
@@ -98,6 +118,7 @@ let
       {
         name = if net.name != null then net.name else stackName;
         inherit (net)
+          enable
           driver
           subnet
           gateway
@@ -178,27 +199,40 @@ let
       containerNames = attrNames stackCfg.containers;
       externalNetServices = map (n: "docker-network-${n}.service") net.external;
       networkService = "docker-network-${net.name}.service";
+
+      # Container service config when network is enabled
+      containerNetworkConfig = {
+        serviceConfig = containers.serviceDefaults // {
+          # Ensure network actually exists before starting container
+          # This handles cases where network disappeared but service is still "active"
+          ExecStartPre = [ "${mkNetworkEnsureScript net}" ];
+        };
+        after = [ networkService ] ++ externalNetServices;
+        requires = [ networkService ];
+        wants = externalNetServices;
+      };
+
+      # Container service config when network is disabled (e.g., host networking)
+      containerNoNetworkConfig = {
+        serviceConfig = containers.serviceDefaults;
+      };
+
+      # Base container config (always applied)
+      containerBaseConfig = {
+        partOf = [ "${targetName}.target" ];
+        wantedBy = [ "${targetName}.target" ];
+      };
     in
     # Container service extensions
     listToAttrs (
       map (containerName: {
         name = "docker-${containerName}";
-        value = {
-          serviceConfig = containers.serviceDefaults // {
-            # Ensure network actually exists before starting container
-            # This handles cases where network disappeared but service is still "active"
-            ExecStartPre = [ "${mkNetworkEnsureScript net}" ];
-          };
-          after = [ networkService ] ++ externalNetServices;
-          requires = [ networkService ];
-          wants = externalNetServices;
-          partOf = [ "${targetName}.target" ];
-          wantedBy = [ "${targetName}.target" ];
-        };
+        value =
+          containerBaseConfig // (if net.enable then containerNetworkConfig else containerNoNetworkConfig);
       }) containerNames
     )
-    // {
-      # Network service
+    # Network service (only when enabled)
+    // optionalAttrs net.enable {
       "docker-network-${net.name}" = {
         path = [ pkgs.docker ];
         serviceConfig = {
