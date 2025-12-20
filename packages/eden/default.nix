@@ -184,8 +184,8 @@ stdenv.mkDerivation (finalAttrs: {
     domain = "git.eden-emu.dev";
     owner = "eden-emu";
     repo = "eden";
-    rev = "v0.0.4-rc3";
-    hash = "sha256-w5H6r9R3HuMTRw49GpMiIS9ELPmBQnZkQZ8buXkZkCA=";
+    rev = "4edb70c8f055aa8774443446dbd1b0afe387d284";
+    hash = "sha256-zlfQ34ZKACjeKBeGrJWxa95NWYGrvZuvqsipDN84q5o=";
     fetchSubmodules = true;
   };
 
