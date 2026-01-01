@@ -80,10 +80,14 @@ let
           dirPath = usersHomeDir + "/${user.name}";
           filePath = usersHomeDir + "/${user.name}.nix";
         in
-        if usersHomeDir == null then null
-        else if builtins.pathExists dirPath then dirPath
-        else if builtins.pathExists filePath then filePath
-        else null;
+        if usersHomeDir == null then
+          null
+        else if builtins.pathExists dirPath then
+          dirPath
+        else if builtins.pathExists filePath then
+          filePath
+        else
+          null;
       hasUserHome = userHomePath != null;
 
       # Home Manager enabled only if user home config exists
@@ -96,10 +100,14 @@ let
           dirPath = hostsDir + "/${name}";
           filePath = hostsDir + "/${name}.nix";
         in
-        if hostsDir == null then null
-        else if builtins.pathExists dirPath then dirPath
-        else if builtins.pathExists filePath then filePath
-        else null;
+        if hostsDir == null then
+          null
+        else if builtins.pathExists dirPath then
+          dirPath
+        else if builtins.pathExists filePath then
+          filePath
+        else
+          null;
       hasHostNixos = hostNixosPath != null;
 
       # Host-specific home config path (for auto-discovery)
@@ -109,10 +117,14 @@ let
           dirPath = hostsHomeDir + "/${name}";
           filePath = hostsHomeDir + "/${name}.nix";
         in
-        if hostsHomeDir == null then null
-        else if builtins.pathExists dirPath then dirPath
-        else if builtins.pathExists filePath then filePath
-        else null;
+        if hostsHomeDir == null then
+          null
+        else if builtins.pathExists dirPath then
+          dirPath
+        else if builtins.pathExists filePath then
+          filePath
+        else
+          null;
       hasHostHome = hostHomePath != null;
 
       # ── Build the 'host' attribute for specialArgs ──
@@ -173,12 +185,6 @@ let
                   extraGroups = user.extraGroups;
                 }
                 // (optionalAttrs (user.uid != null) { uid = user.uid; });
-
-                # Auto-login (only if desktop is set)
-                services.displayManager.autoLogin = mkIf (spec.autoLogin && spec.desktop != null) {
-                  enable = true;
-                  user = user.name;
-                };
               }
             )
           ]

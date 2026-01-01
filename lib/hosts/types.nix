@@ -67,16 +67,6 @@ let
   # HOST SPEC - References a user by name
   # ─────────────────────────────────────────────────────────────
 
-  # Desktop environment - null means headless/server
-  desktopType = t.nullOr (
-    t.either t.str (
-      t.enum [
-        "gnome"
-        "niri"
-      ]
-    )
-  );
-
   # Base host options
   baseHostOptions =
     { name, config, ... }:
@@ -117,7 +107,7 @@ let
         # ── Host Type Flags ──
         isServer = mkOption {
           type = t.bool;
-          description = "Host is a server (affects defaults like autoLogin)";
+          description = "Host is a server";
           default = false;
         };
 
@@ -125,20 +115,6 @@ let
           type = t.bool;
           description = "Minimal HM config (only coreHomeModules, skip user/host HM directories)";
           default = false;
-        };
-
-        # ── Desktop ──
-        desktop = mkOption {
-          type = desktopType;
-          description = "Desktop environment (null for headless)";
-          default = null;
-          example = "niri";
-        };
-
-        autoLogin = mkOption {
-          type = t.bool;
-          description = "Enable automatic login";
-          default = !config.isServer && config.desktop != null;
         };
 
         # ── Advanced ──
@@ -163,9 +139,6 @@ in
 
     # Host specification type
     hostSpec = t.submodule baseHostOptions;
-
-    # Individual types for reuse
-    inherit desktopType;
   };
 
   # Factory functions to create extended types (at top level)
