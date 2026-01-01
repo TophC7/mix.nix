@@ -5,7 +5,19 @@
 #   scan*  = filesystem scan only, returns paths (no import/evaluation)
 #   import* = imports and evaluates files with provided args
 #
+# Convention:
+#   Files/directories starting with _ are excluded (e.g., _helpers.nix, _lib/)
+#
 { lib }:
+let
+  # Common filter predicate for importable entries
+  # Includes: directories and .nix files (except default.nix)
+  # Excludes: entries starting with _ (private/internal)
+  isImportable =
+    name: type:
+    !(lib.strings.hasPrefix "_" name)
+    && ((type == "directory") || ((name != "default.nix") && (lib.strings.hasSuffix ".nix" name)));
+in
 {
   # Scan directory, import all modules, and merge their attrsets
   # Perfect for lib/ subdirectories that export attrsets
@@ -16,10 +28,7 @@
     path: args:
     let
       files = builtins.attrNames (
-        lib.attrsets.filterAttrs (
-          name: type:
-          (type == "directory") || ((name != "default.nix") && (lib.strings.hasSuffix ".nix" name))
-        ) (builtins.readDir path)
+        lib.attrsets.filterAttrs isImportable (builtins.readDir path)
       );
       imported = builtins.map (f: import (path + "/${f}") args) files;
     in
@@ -51,10 +60,7 @@
     path:
     builtins.map (f: (path + "/${f}")) (
       builtins.attrNames (
-        lib.attrsets.filterAttrs (
-          name: type:
-          (type == "directory") || ((name != "default.nix") && (lib.strings.hasSuffix ".nix" name))
-        ) (builtins.readDir path)
+        lib.attrsets.filterAttrs isImportable (builtins.readDir path)
       )
     );
 
@@ -67,10 +73,7 @@
   scanNames =
     path:
     builtins.attrNames (
-      lib.attrsets.filterAttrs (
-        name: type:
-        (type == "directory") || ((name != "default.nix") && (lib.strings.hasSuffix ".nix" name))
-      ) (builtins.readDir path)
+      lib.attrsets.filterAttrs isImportable (builtins.readDir path)
     );
 
   # Scan directory and return attrset of paths (no import)
@@ -84,10 +87,7 @@
   scanAttrs =
     path:
     let
-      entries = lib.attrsets.filterAttrs (
-        name: type:
-        (type == "directory") || ((name != "default.nix") && (lib.strings.hasSuffix ".nix" name))
-      ) (builtins.readDir path);
+      entries = lib.attrsets.filterAttrs isImportable (builtins.readDir path);
 
       toAttrName =
         name: if lib.strings.hasSuffix ".nix" name then lib.strings.removeSuffix ".nix" name else name;
@@ -107,10 +107,7 @@
   importAttrs =
     path: args:
     let
-      entries = lib.attrsets.filterAttrs (
-        name: type:
-        (type == "directory") || ((name != "default.nix") && (lib.strings.hasSuffix ".nix" name))
-      ) (builtins.readDir path);
+      entries = lib.attrsets.filterAttrs isImportable (builtins.readDir path);
 
       toAttrName =
         name: if lib.strings.hasSuffix ".nix" name then lib.strings.removeSuffix ".nix" name else name;
