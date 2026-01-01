@@ -48,6 +48,8 @@ lib/
 └── infra/           # Infrastructure utilities (containers, etc.)
 modules/
 ├── nixos/           # Reusable NixOS modules
+│   ├── oci-stacks.nix   # OCI container stack orchestration
+│   └── ...
 └── home/            # Reusable Home Manager modules
 parts/
 └── hosts.nix        # Flake-parts integration
@@ -110,11 +112,11 @@ This means adding a new `.nix` file to a directory automatically exports its att
 
 **lib/** and **modules/** serve different purposes:
 
-| Aspect | lib/ | modules/ |
-|--------|------|----------|
-| **Purpose** | Functions and utilities | User-facing options |
-| **Consumer usage** | Called in expressions | Imported, then options are set |
-| **Provides** | Helpers, builders, data transforms | `options.*` definitions with defaults and assertions |
+| Aspect             | lib/                               | modules/                                             |
+| ------------------ | ---------------------------------- | ---------------------------------------------------- |
+| **Purpose**        | Functions and utilities            | User-facing options                                  |
+| **Consumer usage** | Called in expressions              | Imported, then options are set                       |
+| **Provides**       | Helpers, builders, data transforms | `options.*` definitions with defaults and assertions |
 
 **When to use lib/:**
 - Pure functions (no side effects, no `config`)
@@ -198,9 +200,12 @@ Ask: "Should this be configurable, or should it follow convention?"
 ### lib.fs
 
 Filesystem utilities for auto-discovery:
-- `scanPaths` - List .nix files in a directory
-- `importAndMerge` - Import all files and merge attrsets
-- `scanModules` - Auto-discover modules with named attributes
+- `scanPaths` - Returns paths to all importable modules in a directory
+- `scanNames` - Returns just filenames (not full paths)
+- `scanAttrs` - Returns attrset of `{ name = ./path; }` for module indices
+- `importAndMerge` - Import all files and merge their attrsets
+- `importAttrs` - Import all and return attrset of evaluated results
+- `relativeTo` - Curried path resolver for composability with map
 
 ### lib.desktop
 
@@ -214,17 +219,24 @@ Desktop environment utilities:
 Host and user management:
 - `lib.hosts.types.userSpec` - User specification type
 - `lib.hosts.types.hostSpec` - Host specification type
-- `lib.hosts.mkUserSpec` - Factory to extend user type with custom options
-- `lib.hosts.mkHostSpec` - Factory to extend host type with custom options
+- `lib.hosts.modules.baseUserSpec` - Base user module (for submoduleWith imports)
+- `lib.hosts.modules.baseHostSpec` - Base host module (for submoduleWith imports)
+- `lib.hosts.mkUserSpecType` - Build userSpec type with extension modules
+- `lib.hosts.mkHostSpecType` - Build hostSpec type with extension modules
 - `lib.hosts.mkHosts` - Build `nixosConfigurations` from specs
 
-**Namespace convention**: Types live under `.types.*`, factory/builder functions at top level.
+**Namespace convention**: Types live under `.types.*`, base modules under `.modules.*`, builder functions at top level.
+
+**Composable Extensions**: To extend hostSpec/userSpec from other flakes, use `mix.hostSpecExtensions` and `mix.userSpecExtensions`. This allows multiple extension flakes (like arroz.nix, play.nix) to add options without conflicts.
+
+**Extension: arroz.nix** - For desktop environment and greeter configuration options (desktop DE type, auto-login, etc.), use the [arroz.nix](https://github.com/toph/arroz.nix) extension which adds these via `mix.hostSpecExtensions`.
 
 ### lib.infra
 
 Infrastructure utilities:
-- Container helpers
-- Networking utilities
+- `lib.infra.containers.serviceDefaults` - Default systemd service config for containers (restart policies, timing)
+
+Used by the `oci-stacks` module but can also be applied directly to container services.
 
 ## Important Notes
 
@@ -236,8 +248,60 @@ Infrastructure utilities:
 
 ## Troubleshooting
 
-When debugging:
-1. Determine if the issue is in mix.nix or the consumer's usage
-2. Verify paths exist when using auto-discovery
-3. Check that all required arguments are passed
-4. Use `nix repl` to test library functions in isolation
+### Debugging Principles
+
+**Always verify the foundation before building on top of it.** For exampe when you see an error like `attribute 'foo' missing`, don't assume complex causes (module system, evaluation order, etc.) - first verify the attribute actually exists.
+
+### Example Debug Commands
+
+```bash
+# Verify lib extension works and inspect structure
+nix eval --impure --expr '
+  let lib = (import ./lib) (import <nixpkgs> {}).lib;
+  in builtins.attrNames lib.infra
+'
+
+# Check if a specific path exists
+nix eval --impure --expr '
+  let lib = (import ./lib) (import <nixpkgs> {}).lib;
+  in lib.infra.containers.serviceDefaults
+'
+
+# Test a module in isolation
+nix repl
+> :lf .
+> lib.fs.scanPaths ./modules/nixos
+```
+
+### Common Issues
+
+1. **"attribute 'X' missing" in lib.namespace.X**
+   - First verify with `nix eval` that the attribute actually exists
+   - Check the file exports the right structure (e.g., `{ containers = { ... }; }` not just `{ ... }`)
+   - Remember: `importAndMerge` flattens - what you export at top level becomes the namespace
+
+2. **Module receives wrong lib**
+   - Consumer must pass extended lib via `specialArgs` in `nixosSystem`
+   - Verify with: `nix eval .#nixosConfigurations.hostname.config._module.args.lib.infra`
+
+3. **Infinite recursion in modules**
+   - Usually caused by accessing `config` in a way that forces eager evaluation
+   - Use `lib.mkMerge` with separate config paths, not `mapAttrsToList` on `config`
+
+### Lib Namespace Structure
+
+When adding to lib namespaces, remember that `importAndMerge` merges top-level attributes:
+
+```nix
+# lib/infra/containers.nix
+{ lib }: {
+  containers = {        # <-- This becomes lib.infra.containers
+    serviceDefaults = { ... };
+  };
+}
+
+# NOT this (would become lib.infra.serviceDefaults):
+{ lib }: {
+  serviceDefaults = { ... };  # Wrong - no containers namespace
+}
+```

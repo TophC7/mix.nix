@@ -5,9 +5,13 @@
 #   lib.hosts.types.userSpec   # User definition type
 #   lib.hosts.types.hostSpec   # Host definition type (references user by name)
 #
-#   # Extend with your own options
-#   lib.hosts.mkHostSpec { options.mounts = lib.mkOption { ... }; }
-#   lib.hosts.mkUserSpec { options.email = lib.mkOption { ... }; }
+#   # For composable extensions (used by parts/hosts.nix):
+#   lib.hosts.modules.baseUserSpec   # Base user module (for submoduleWith imports)
+#   lib.hosts.modules.baseHostSpec   # Base host module (for submoduleWith imports)
+#
+#   # Build types with extensions:
+#   lib.hosts.mkUserSpecType [ extraModule1 extraModule2 ]
+#   lib.hosts.mkHostSpecType [ extraModule1 extraModule2 ]
 #
 { lib }:
 
@@ -20,9 +24,9 @@ let
   # USER SPEC - Defined once, referenced by hosts
   # ─────────────────────────────────────────────────────────────
 
-  # Base user options
+  # Base user options module (can be used with submoduleWith imports)
   # Home Manager is auto-enabled via usersHomeDir discovery (no explicit option needed)
-  baseUserOptions = {
+  baseUserSpec = {
     # Allow arbitrary additional attributes for extensions
     freeformType = t.attrsOf t.anything;
 
@@ -67,8 +71,8 @@ let
   # HOST SPEC - References a user by name
   # ─────────────────────────────────────────────────────────────
 
-  # Base host options
-  baseHostOptions =
+  # Base host options module (can be used with submoduleWith imports)
+  baseHostSpec =
     { name, config, ... }:
     {
       # Allow arbitrary additional attributes for extensions
@@ -132,40 +136,38 @@ in
   # EXPORTS
   # ─────────────────────────────────────────────────────────────
 
-  # Types namespace - contains all type definitions
-  types = {
-    # User specification type
-    userSpec = t.submodule baseUserOptions;
-
-    # Host specification type
-    hostSpec = t.submodule baseHostOptions;
+  # Base modules - for composable extension via submoduleWith imports
+  modules = {
+    baseUserSpec = baseUserSpec;
+    baseHostSpec = baseHostSpec;
   };
 
-  # Factory functions to create extended types (at top level)
-  mkUserSpec =
-    extraModule:
-    t.submodule (
-      let
-        extra = if builtins.isFunction extraModule then extraModule { } else extraModule;
-      in
-      {
-        inherit (baseUserOptions) freeformType;
-        options = baseUserOptions.options // (extra.options or { });
-      }
-    );
+  # Types namespace - contains default (non-extended) type definitions
+  types = {
+    # User specification type (default, no extensions)
+    userSpec = t.submodule baseUserSpec;
 
-  mkHostSpec =
-    extraModule:
-    t.submodule (
-      args:
-      let
-        base = baseHostOptions args;
-        extra = if builtins.isFunction extraModule then extraModule args else extraModule;
-      in
-      {
-        inherit (base) freeformType;
-        options = base.options // (extra.options or { });
-        config = (base.config or { }) // (extra.config or { });
-      }
-    );
+    # Host specification type (default, no extensions)
+    hostSpec = t.submodule baseHostSpec;
+  };
+
+  # ─────────────────────────────────────────────────────────────
+  # TYPE BUILDERS - Create types with extensions
+  # ─────────────────────────────────────────────────────────────
+
+  # Build a userSpec type from a list of extension modules
+  # Usage: mkUserSpecType [ ./extensions/email.nix ./extensions/gpg.nix ]
+  mkUserSpecType =
+    extensionModules:
+    t.submoduleWith {
+      modules = [ baseUserSpec ] ++ extensionModules;
+    };
+
+  # Build a hostSpec type from a list of extension modules
+  # Usage: mkHostSpecType [ ./extensions/desktop.nix ./extensions/gaming.nix ]
+  mkHostSpecType =
+    extensionModules:
+    t.submoduleWith {
+      modules = [ baseHostSpec ] ++ extensionModules;
+    };
 }

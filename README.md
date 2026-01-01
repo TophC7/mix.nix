@@ -169,7 +169,6 @@ Use `lib.mkFlake` for the same declarative host management without flake-parts:
 
       hosts.desktop = {
         user = "myuser";
-        desktop = "niri";
       };
     };
     # Returns: { nixosConfigurations.desktop = <nixosSystem>; }
@@ -739,18 +738,18 @@ The primary integration point. Define users once, reference them across hosts, a
 
 #### Host Options (`mix.hosts`)
 
-| Option                         | Type               | Default          | Description                                          |
-| ------------------------------ | ------------------ | ---------------- | ---------------------------------------------------- |
-| `mix.hosts`                    | `attrsOf hostSpec` | `{}`             | Host definitions                                     |
-| `mix.hosts.<name>.enable`      | `bool`             | `true`           | Build this host                                      |
-| `mix.hosts.<name>.hostName`    | `string`           | attr name        | Hostname                                             |
-| `mix.hosts.<name>.system`      | `enum`             | `"x86_64-linux"` | Architecture (`x86_64-linux`, `aarch64-linux`)       |
-| `mix.hosts.<name>.user`        | `string`           | required         | Username from `mix.users`                            |
-| `mix.hosts.<name>.isServer`    | `bool`             | `false`          | Server mode (affects autoLogin)                      |
-| `mix.hosts.<name>.isMinimal`   | `bool`             | `false`          | Skip user/host HM directories                        |
-| `mix.hosts.<name>.desktop`     | `null` \| `string` | `null`           | Desktop environment (null = headless)                |
-| `mix.hosts.<name>.autoLogin`   | `bool`             | derived          | Auto-login (default: `!isServer && desktop != null`) |
-| `mix.hosts.<name>.specialArgs` | `attrs`            | `{}`             | Extra specialArgs for nixosSystem                    |
+| Option                         | Type               | Default          | Description                                    |
+| ------------------------------ | ------------------ | ---------------- | ---------------------------------------------- |
+| `mix.hosts`                    | `attrsOf hostSpec` | `{}`             | Host definitions                               |
+| `mix.hosts.<name>.enable`      | `bool`             | `true`           | Build this host                                |
+| `mix.hosts.<name>.hostName`    | `string`           | attr name        | Hostname                                       |
+| `mix.hosts.<name>.system`      | `enum`             | `"x86_64-linux"` | Architecture (`x86_64-linux`, `aarch64-linux`) |
+| `mix.hosts.<name>.user`        | `string`           | required         | Username from `mix.users`                      |
+| `mix.hosts.<name>.isServer`    | `bool`             | `false`          | Server mode (affects extension defaults)       |
+| `mix.hosts.<name>.isMinimal`   | `bool`             | `false`          | Skip user/host HM directories                  |
+| `mix.hosts.<name>.specialArgs` | `attrs`            | `{}`             | Extra specialArgs for nixosSystem              |
+
+> **Desktop Configuration:** For desktop environment and greeter options (DE type, auto-login, etc.), use the [arroz.nix](https://github.com/toph/arroz.nix) extension which adds these via `mix.hostSpecExtensions`.
 
 #### Core Modules Options
 
@@ -817,6 +816,7 @@ If you want automatic sibling import, use `lib.scanPaths` in your `default.nix`:
 `lib.scanPaths` returns paths to:
 - All `.nix` files (except `default.nix` itself)
 - All directories (Nix will look for their `default.nix`)
+- **Excludes** entries starting with `_` (e.g., `_helpers.nix`, `_internal/`)
 
 ##### ⚠️ Pitfall: Non-Module Directories
 
@@ -864,13 +864,40 @@ home/hosts/gojo/
    }
    ```
 
-#### Type Extension
+#### Type Extensions
 
-| Option             | Type              | Default                    | Description                                 |
-| ------------------ | ----------------- | -------------------------- | ------------------------------------------- |
-| `mix.userSpecType` | `raw`             | `lib.hosts.types.userSpec` | Custom user type via `lib.hosts.mkUserSpec` |
-| `mix.hostSpecType` | `raw`             | `lib.hosts.types.hostSpec` | Custom host type via `lib.hosts.mkHostSpec` |
-| `mix.homeManager`  | `null` \| `attrs` | `inputs.home-manager`      | Home Manager input                          |
+Extend the host and user specification types by adding modules to the extension lists. This allows multiple flakes (e.g., arroz.nix, play.nix) to compose additional options without conflicts.
+
+| Option                   | Type                    | Default | Description                                   |
+| ------------------------ | ----------------------- | ------- | --------------------------------------------- |
+| `mix.hostSpecExtensions` | `listOf deferredModule` | `[]`    | Modules to add options to hostSpec type       |
+| `mix.userSpecExtensions` | `listOf deferredModule` | `[]`    | Modules to add options to userSpec type       |
+| `mix.homeManager`        | `null` \| `attrs`       | `inputs.home-manager` | Home Manager input              |
+
+**Extension Example (from arroz.nix):**
+```nix
+# arroz.nix/parts/hosts.nix
+{ config, ... }: {
+  config.mix.hostSpecExtensions = [
+    ({ lib, ... }: {
+      options.desktop.niri.enable = lib.mkEnableOption "Niri compositor";
+      options.greeter.type = lib.mkOption {
+        type = lib.types.str;
+        default = "tuigreet";
+      };
+    })
+  ];
+}
+```
+
+Then consumers can use these extended options:
+```nix
+mix.hosts.desktop = {
+  user = "toph";
+  desktop.niri.enable = true;  # From arroz.nix extension
+  greeter.type = "regreet";    # From arroz.nix extension
+};
+```
 
 #### SpecialArgs Available in Modules
 
@@ -912,18 +939,14 @@ When using `mix.hosts`, these are available in your NixOS and Home Manager modul
     hosts = {
       desktop = {
         user = "toph";  # References mix.users.toph
-        desktop = "niri";
-        # autoLogin defaults to true (not server, has desktop)
       };
       server = {
         user = "admin";
         isServer = true;
         system = "aarch64-linux";
-        # autoLogin defaults to false (is server)
       };
       laptop = {
         user = "toph";
-        desktop = "gnome";
         isMinimal = true;  # Only coreHomeModules, skip user/host dirs
       };
     };
@@ -1083,7 +1106,9 @@ Internal utilities for direct use. Access via the extended `lib`.
 
 Directory scanning and module auto-discovery.
 
-- `scanPaths path` - Returns paths to all importable modules (directories + .nix, excluding default.nix)
+**Convention:** Files and directories starting with `_` are excluded from all scan/import functions. Use this for private helpers or internal modules (e.g., `_helpers.nix`, `_internal/`).
+
+- `scanPaths path` - Returns paths to all importable modules (directories + .nix, excluding `default.nix` and `_*`)
 - `scanNames path` - Returns just filenames (not full paths)
 - `scanAttrs path` - Returns attrset of `{ name = ./path; }` for module indices
 - `importAndMerge path args` - Import all files and merge their attrsets
@@ -1113,10 +1138,12 @@ lib.mkFlake {
 
 Types and builders for declarative configurations.
 
-- `types.userSpec` - User specification type
-- `types.hostSpec` - Host specification type
-- `mkUserSpec extraModule` - Factory to extend user type
-- `mkHostSpec extraModule` - Factory to extend host type
+- `types.userSpec` - User specification type (default, no extensions)
+- `types.hostSpec` - Host specification type (default, no extensions)
+- `modules.baseUserSpec` - Base user module (for submoduleWith imports)
+- `modules.baseHostSpec` - Base host module (for submoduleWith imports)
+- `mkUserSpecType [modules]` - Build userSpec type with extension modules
+- `mkHostSpecType [modules]` - Build hostSpec type with extension modules
 - `mkHost {...}` - Build single nixosConfiguration
 - `mkHosts {...}` - Build multiple nixosConfigurations
 
@@ -1236,11 +1263,9 @@ Complete flake.nix showing typical usage:
         hosts = {
           desktop = {
             user = "toph";
-            desktop = "niri";
           };
           laptop = {
             user = "toph";
-            desktop = "gnome";
           };
           homelab = {
             user = "toph";
@@ -1323,8 +1348,8 @@ Complete flake.nix showing typical usage:
 3. **Convention Over Configuration**
    Consistent directory structures reduce cognitive load. Follow established patterns.
 
-4. **Extensibility Via Factory Functions**
-   Base types stay minimal. Use `mkUserSpec`/`mkHostSpec` to add custom options.
+4. **Extensibility Via Composable Extensions**
+   Base types stay minimal. Use `mix.hostSpecExtensions`/`mix.userSpecExtensions` to add custom options from multiple flakes.
 
 5. **Tools Over Configs**
    While some modules (like fastfetch) include opinionated defaults, the focus is on providing reusable tools and specifications rather than full system configurations.

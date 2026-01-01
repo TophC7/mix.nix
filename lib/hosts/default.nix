@@ -11,16 +11,18 @@
 #   lib.hosts.mkHost { ... }       # Build a single NixOS config
 #   lib.hosts.mkHosts { ... }      # Build multiple NixOS configs
 #
-# Extended (add your own options):
-#   lib.hosts.mkUserSpec {
-#     options.email = lib.mkOption { type = lib.types.str; };
-#     options.gpgKey = lib.mkOption { type = lib.types.nullOr lib.types.str; };
-#   }
+# Composable extensions (via flake-parts mix.hostSpecExtensions):
+#   # Extension flakes add modules to the extension list:
+#   config.mix.hostSpecExtensions = [
+#     ({ lib, ... }: {
+#       options.desktop.niri.enable = lib.mkEnableOption "Niri";
+#       options.greeter.type = lib.mkOption { type = lib.types.str; };
+#     })
+#   ];
 #
-#   lib.hosts.mkHostSpec {
-#     options.mounts.tank = lib.mkOption { type = lib.types.bool; default = false; };
-#     options.network.vpn = lib.mkOption { type = lib.types.bool; default = false; };
-#   }
+# Building extended types directly:
+#   lib.hosts.mkUserSpecType [ ./extensions/email.nix ]
+#   lib.hosts.mkHostSpecType [ ./extensions/desktop.nix ]
 #
 # ─────────────────────────────────────────────────────────────
 # EXAMPLE
