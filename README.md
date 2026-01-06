@@ -1,10 +1,14 @@
-<p align="left">
-  <h1><img src="public/nix.svg" height=30 /> mix.nix</h1>
-  <p >A NixOS library for declarative host management, theming, and desktop configuration</p>
-  <a href="https://deepwiki.com/TophC7/dot.nix"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
-</p>
+<h1> 
+  <picture>
+    <source srcset="https://fonts.gstatic.com/s/e/notoemoji/latest/2744_fe0f/512.webp" type="image/webp">
+    <img src="https://fonts.gstatic.com/s/e/notoemoji/latest/2744_fe0f/512.gif" alt="❄" width="32" height="32">
+  </picture>
+  mix.nix  
+</h1>
 
----
+> A NixOS library for declarative host management, theming, and desktop configuration
+> 
+> [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/TophC7/mix.nix)
 
 ## Table of Contents
 
