@@ -6,6 +6,7 @@
 #   pkgs.stable.*    - packages from stable nixpkgs
 #   pkgs.unstable.*  - packages from unstable nixpkgs
 #   pkgs.<custom>    - custom packages from packages/
+#   pkgs.ryotKernels.*  - custom CachyOS kernel variants
 #   Overridden packages from overlays/overrides/
 { inputs }:
 final: prev:
@@ -40,5 +41,16 @@ let
     inherit lib final prev;
     inherit (channels) stable unstable;
   };
+
+  # Import custom CachyOS kernel variants
+  ryotKernels = import ./ryot-kernels {
+    inherit
+      lib
+      final
+      prev
+      inputs
+      ;
+    inherit (channels) stable unstable;
+  };
 in
-channels // packages // overrides
+channels // packages // overrides // ryotKernels

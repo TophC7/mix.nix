@@ -1077,6 +1077,28 @@ nix flake show github:tophc7/mix.nix
 nix build github:tophc7/mix.nix#proton-cachyos
 ```
 
+#### CachyOS Kernel Variants
+
+Optimized kernel configurations for different workloads:
+
+| Package | Use Case | Key Settings |
+|---------|----------|--------------|
+| `linuxPackages-ryot` | Desktop/Gaming | 1000Hz, ThinLTO, full preemption |
+| `linuxPackages-ryot-zfs` | ZFS Servers | 500Hz, ThinLTO, includes `zfs_cachyos` |
+| `linuxPackages-ryot-net` | Routers | 300Hz, no LTO, voluntary preemption |
+
+```nix
+# Desktop/Gaming
+boot.kernelPackages = pkgs.linuxPackages-ryot;
+
+# ZFS Server (use zfs_cachyos for compatibility)
+boot.kernelPackages = pkgs.linuxPackages-ryot-zfs;
+boot.zfs.package = config.boot.kernelPackages.zfs_cachyos;
+
+# Router
+boot.kernelPackages = pkgs.linuxPackages-ryot-net;
+```
+
 </details>
 
 <details>

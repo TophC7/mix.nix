@@ -21,6 +21,12 @@
       url = "github:InioX/Matugen";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # CachyOS kernel flake for custom kernel builds
+    nix-cachyos-kernel = {
+      url = "github:xddxdd/nix-cachyos-kernel/release";
+      # Do NOT override nixpkgs to avoid kernel/patch version mismatch
+    };
   };
 
   outputs =
