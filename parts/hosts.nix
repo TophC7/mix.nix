@@ -52,12 +52,19 @@
 #   };
 #
 
+# Receives mixInputs from flake.nix closure to forward mix.nix's inputs to consumers
+{ mixInputs }:
 {
   inputs,
   lib,
   config,
   ...
 }:
+let
+  # Merge inputs: mix.nix provides base, consumer can override
+  # Consumer's inputs take precedence (rightmost wins in //)
+  mergedInputs = mixInputs // inputs;
+in
 {
   options.mix = {
     # ─────────────────────────────────────────────────────────────
@@ -266,6 +273,24 @@
         { inherit flakeRoot; }
       '';
     };
+
+    # ─────────────────────────────────────────────────────────────
+    # INTERNAL - mix.nix's inputs (exposed for extension flakes)
+    # ─────────────────────────────────────────────────────────────
+
+    mixInputs = lib.mkOption {
+      type = lib.types.attrs;
+      default = mixInputs;
+      readOnly = true;
+      description = ''
+        mix.nix's original flake inputs.
+        Available for extension flakes (like arroz.nix) that need to access
+        mix.nix's dependencies without consumers having to redeclare them.
+
+        This is automatically set from mix.nix's inputs and merged with consumer
+        inputs. Consumer inputs take precedence.
+      '';
+    };
   };
 
   config = {
@@ -275,7 +300,8 @@
         specs = config.mix.hosts;
         users = config.mix.users;
         secrets = config.mix.secrets.loaded or { };
-        inherit inputs;
+        # Use merged inputs: mix.nix's inputs + consumer's inputs (consumer wins)
+        inputs = mergedInputs;
         inherit (config.mix)
           hostsDir
           hostsHomeDir

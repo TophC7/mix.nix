@@ -35,6 +35,11 @@
       # Extend nixpkgs.lib with our custom functions BEFORE entering flake-parts
       # This must be done here so it can be passed via specialArgs
       lib = (import ./lib) inputs.nixpkgs.lib;
+
+      # Capture mix.nix's inputs for forwarding to consumers
+      # This allows consumers to use mix.nix's dependencies (e.g., nix-cachyos-kernel)
+      # without having to declare them in their own flake.nix
+      mixInputs = inputs;
     in
     flake-parts.lib.mkFlake
       {
@@ -43,7 +48,7 @@
         specialArgs = { inherit lib; };
       }
       {
-        imports = [ ./parts/default.nix ];
+        imports = [ (import ./parts/default.nix { inherit mixInputs; }) ];
 
         # Systems to build for (Linux only)
         systems = [
@@ -53,5 +58,17 @@
 
         # Expose extended lib as flake output
         flake.lib = lib;
+      }
+    # Direct flake outputs - wrap modules to capture mixInputs in closure
+    // {
+      flakeModules = {
+        default = import ./parts/default.nix { inherit mixInputs; };
+        hosts = import ./parts/hosts.nix { inherit mixInputs; };
+        secrets = ./parts/secrets.nix;
+        modules = ./parts/modules.nix;
+        overlays = import ./parts/overlays.nix { inherit mixInputs; };
+        packages = ./parts/packages.nix;
+        devshell = ./parts/devshell.nix;
       };
+    };
 }

@@ -5,24 +5,17 @@
 #
 # This imports: hosts, secrets, modules, overlays, packages, devshell
 #
-_: {
+# Receives mixInputs from flake.nix to forward mix.nix's inputs to consumers.
+# This allows consumers to use dependencies like nix-cachyos-kernel without declaring them.
+#
+{ mixInputs }:
+{
   imports = [
-    ./hosts.nix
+    (import ./hosts.nix { inherit mixInputs; })
     ./secrets.nix
     ./modules.nix
-    ./overlays.nix
+    (import ./overlays.nix { inherit mixInputs; })
     ./packages.nix
     ./devshell.nix
   ];
-
-  # Expose all flake-parts modules for consumers
-  flake.flakeModules = {
-    default = ./default.nix;
-    hosts = ./hosts.nix;
-    secrets = ./secrets.nix;
-    modules = ./modules.nix;
-    overlays = ./overlays.nix;
-    packages = ./packages.nix;
-    devshell = ./devshell.nix;
-  };
 }
