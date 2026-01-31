@@ -54,12 +54,18 @@ let
   };
 
   # Apply LLVM fixes and include CachyOS-patched ZFS module
-  packages = helpers.kernelModuleLLVMOverride (final.linuxKernel.packagesFor kernel) // {
-    # CachyOS-patched ZFS for kernel compatibility
-    zfs_cachyos = cachyosKernels.zfs-cachyos-lto.override {
-      kernel = kernel;
-    };
-  };
+  # Use .extend to properly add zfs_cachyos to the extensible packages set.
+  # This preserves the packages' extensibility and ensures zfs_cachyos is
+  # recognized as a proper kernel module. The zfs-cachyos-lto package is
+  # already built with LTO, so it doesn't need kernelModuleLLVMOverride.
+  packages = (helpers.kernelModuleLLVMOverride (final.linuxKernel.packagesFor kernel)).extend (
+    _self: _super: {
+      # CachyOS-patched ZFS for kernel compatibility
+      zfs_cachyos = cachyosKernels.zfs-cachyos-lto.override {
+        kernel = kernel;
+      };
+    }
+  );
 in
 {
   inherit kernel packages;
