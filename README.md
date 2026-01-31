@@ -1062,11 +1062,14 @@ Custom packages built by mix.nix.
 | ---------------------- | ----------------------------------------------------- |
 | `eden`                 | Nintendo Switch video game console emulator           |
 | `eightbitdo-updater`   | 8BitDo controller firmware updater                    |
+| `gamescope-git`        | Gamescope compositor (git version)                    |
+| `gamescope-git.wsi`    | Gamescope WSI layer only (git version)                |
 | `journey`              | Cross-platform journal app                            |
 | `monocraft-nerd-fonts` | Minecraft-style monospace font with Nerd Font icons   |
 | `olm-toggle`           | GNOME Shell extension to toggle OLM tunneling service |
 | `procon2-init`         | Nintendo Switch 2 Pro Controller USB initializer      |
-| `proton-cachyos`       | CachyOS Proton build with optimizations               |
+| `proton-cachyos`       | CachyOS Proton build (x86-64-v3)                      |
+| `proton-cachyos.v4`    | CachyOS Proton build (x86-64-v4, AVX-512)             |
 | `WiiUDownloader`       | GUI to download Wii U content from Nintendo servers   |
 
 ```bash

@@ -1,25 +1,21 @@
 #!/usr/bin/env fish
 
-# Update script for proton-cachyos versions.json
-# Checks for new releases and updates the version file
+# Update script for proton-cachyos versions
+# Updates both v3 and v4 variants to the latest release
 
-set -l versionsFile versions.json
+set -l scriptDir (dirname (status filename))
+set -l variants v3 v4
 
-# Check if we're in the right directory
-if not test -f $versionsFile
-    echo "Error: Could not find $versionsFile"
-    echo "Please run this script from the pkgs/proton-cachyos directory"
-    exit 1
+# Check dependencies
+for cmd in curl jq nix-prefetch-url nix-hash
+    if not command -q $cmd
+        echo "Error: Required command '$cmd' not found"
+        exit 1
+    end
 end
 
-# Read current version
-set -l currentBase (jq -r .base < $versionsFile)
-set -l currentRelease (jq -r .release < $versionsFile)
-
-echo "Current version: $currentBase-$currentRelease"
-echo "Checking for updates..."
-
-# Fetch latest release from CachyOS repository
+# Fetch latest release tag
+echo "Fetching latest release..."
 set -l latestTag (curl -s 'https://api.github.com/repos/CachyOS/proton-cachyos/releases/latest' | jq -r '.tag_name')
 
 if test -z "$latestTag" -o "$latestTag" = null
@@ -30,7 +26,6 @@ end
 echo "Latest tag: $latestTag"
 
 # Parse the tag format: cachyos-X.Y-Z-slr
-# Remove prefix and suffix, then split
 set -l tagParts (string replace 'cachyos-' '' $latestTag | string replace -- '-slr' '' | string split '-')
 
 if test (count $tagParts) -ne 2
@@ -42,55 +37,64 @@ end
 set -l latestBase $tagParts[1]
 set -l latestRelease $tagParts[2]
 
-# Check if we're already up to date
-if test "$currentBase" = "$latestBase" -a "$currentRelease" = "$latestRelease"
-    echo "✓ Already up to date!"
-    exit 0
-end
-
-echo "New version available: $latestBase-$latestRelease"
-
-# Construct the download URL
-set -l fileName "proton-cachyos-$latestBase-$latestRelease-slr-x86_64_v3.tar.xz"
-set -l downloadUrl "https://github.com/CachyOS/proton-cachyos/releases/download/$latestTag/$fileName"
-
-echo "Computing hash for: $fileName"
-
-# Fetch the hash (this will download the file to verify)
-set -l sha256 (nix-prefetch-url --type sha256 "$downloadUrl" 2>/dev/null)
-
-if test -z "$sha256"
-    echo "Error: Failed to download or hash the release"
-    echo "URL: $downloadUrl"
-    exit 1
-end
-
-# Convert to SRI hash format
-set -l sriHash (nix-hash --to-sri --type sha256 $sha256)
-
-echo "New hash: $sriHash"
-
-# Create the new JSON content
-set -l newJson (jq -n \
-    --arg base "$latestBase" \
-    --arg release "$latestRelease" \
-    --arg hash "$sriHash" \
-    '{base: $base, release: $release, hash: $hash}')
-
-# Write the new JSON to the file
-echo $newJson | jq '.' >$versionsFile
-
-if test $status -ne 0
-    echo "Error: Failed to update $versionsFile"
-    exit 1
-end
-
-echo "✓ Updated $versionsFile"
+echo "Latest version: $latestBase-$latestRelease"
 echo ""
-echo "Summary:"
-echo "  Version: $currentBase-$currentRelease → $latestBase-$latestRelease"
-echo "  Hash: $sriHash"
+
+# Update each variant
+set -l updated 0
+
+for variant in $variants
+    set -l versionsFile "$scriptDir/versions-$variant.json"
+
+    if not test -f $versionsFile
+        echo "Warning: $versionsFile not found, skipping"
+        continue
+    end
+
+    set -l currentBase (jq -r .base < $versionsFile)
+    set -l currentRelease (jq -r .release < $versionsFile)
+
+    echo "[$variant] Current: $currentBase-$currentRelease"
+
+    if test "$currentBase" = "$latestBase" -a "$currentRelease" = "$latestRelease"
+        echo "[$variant] Already up to date"
+        continue
+    end
+
+    # Construct download URL and fetch hash
+    set -l fileName "proton-cachyos-$latestBase-$latestRelease-slr-x86_64_$variant.tar.xz"
+    set -l downloadUrl "https://github.com/CachyOS/proton-cachyos/releases/download/$latestTag/$fileName"
+
+    echo "[$variant] Fetching hash for: $fileName"
+    set -l sha256 (nix-prefetch-url --type sha256 "$downloadUrl" 2>/dev/null)
+
+    if test -z "$sha256"
+        echo "[$variant] Error: Failed to download or hash the release"
+        echo "[$variant] URL: $downloadUrl"
+        continue
+    end
+
+    # Convert to SRI hash format
+    set -l sriHash (nix-hash --to-sri --type sha256 $sha256)
+
+    # Update the JSON file
+    jq -n \
+        --arg base "$latestBase" \
+        --arg release "$latestRelease" \
+        --arg hash "$sriHash" \
+        '{base: $base, release: $release, hash: $hash}' >$versionsFile
+
+    echo "[$variant] Updated: $currentBase-$currentRelease -> $latestBase-$latestRelease"
+    set updated (math $updated + 1)
+end
+
 echo ""
-echo "Remember to commit the changes:"
-echo "  git add $versionsFile"
-echo "  git commit -m \"proton-cachyos: $currentBase.$currentRelease → $latestBase.$latestRelease\""
+if test $updated -gt 0
+    echo "Updated $updated variant(s)"
+    echo ""
+    echo "Commit with:"
+    echo "  git add packages/proton-cachyos/versions-*.json"
+    echo "  git commit -m \"proton-cachyos: update to $latestBase.$latestRelease\""
+else
+    echo "All variants up to date"
+end
