@@ -179,13 +179,13 @@ let
 in
 stdenv.mkDerivation (finalAttrs: {
   pname = "eden";
-  version = "v0.0.4-rc3";
+  version = "v0.1.1";
   src = fetchFromGitea {
     domain = "git.eden-emu.dev";
     owner = "eden-emu";
     repo = "eden";
-    rev = "4edb70c8f055aa8774443446dbd1b0afe387d284";
-    hash = "sha256-zlfQ34ZKACjeKBeGrJWxa95NWYGrvZuvqsipDN84q5o=";
+    rev = "385b7cad77c3546082087c3993a3944c2050dd15";
+    hash = "sha256-tkro7ZHgn2809Utf/Li5+OiseywyQKH15eqphxlJZQQ=";
     fetchSubmodules = true;
   };
 
@@ -272,7 +272,7 @@ stdenv.mkDerivation (finalAttrs: {
     # enable some optional features
     (lib.cmakeBool "YUZU_USE_QT_WEB_ENGINE" true)
     (lib.cmakeBool "YUZU_USE_QT_MULTIMEDIA" true)
-    (lib.cmakeBool "USE_DISCORD_PRESENCE" true)
+    (lib.cmakeBool "USE_DISCORD_PRESENCE" false)
 
     # We dont want to bother upstream with potentially outdated compat reports
     (lib.cmakeBool "YUZU_ENABLE_COMPATIBILITY_REPORTING" false)
