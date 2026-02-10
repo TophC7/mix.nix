@@ -12,6 +12,7 @@ _: {
             # Nix tooling
             nil # Nix LSP
             nixfmt-rfc-style # Official Nix formatter
+            nix-prefetch-git
             statix # Nix linter
             deadnix # Find dead code
 
