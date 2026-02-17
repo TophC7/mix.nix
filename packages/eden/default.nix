@@ -35,8 +35,6 @@ let
     ffmpeg-headless
     qt6
     fetchFromGitHub
-    fetchurl
-    unzip
     unordered_dense
     mbedtls
     xbyak
@@ -53,21 +51,7 @@ let
     qt5compat
     ;
 
-  compat-list = stdenv.mkDerivation {
-    pname = "yuzu-compatibility-list";
-    version = "unstable-2024-02-26";
-
-    src = fetchFromGitHub {
-      owner = "flathub";
-      repo = "org.yuzu_emu.yuzu";
-      rev = "9c2032a3c7e64772a8112b77ed8b660242172068";
-      hash = "sha256-ITh/W4vfC9w9t+TJnPeTZwWifnhTNKX54JSSdpgaoBk=";
-    };
-
-    buildCommand = ''
-      cp $src/compatibility_list.json $out
-    '';
-  };
+  sources = lib.importJSON ./sources.json;
 
   quazip = stdenv.mkDerivation {
     pname = "quazip";
@@ -95,12 +79,12 @@ let
 
   mcl = stdenv.mkDerivation {
     pname = "mcl";
-    version = "latest";
+    version = "unstable";
     src = fetchFromGitHub {
       owner = "azahar-emu";
       repo = "mcl";
-      rev = "7b08d83418f628b800dfac1c9a16c3f59036fbad";
-      hash = "sha256-uTOiOlMzKbZSjKjtVSqFU+9m8v8horoCq3wL0O2E8sI=";
+      rev = sources.mcl.rev;
+      hash = sources.mcl.hash;
     };
 
     nativeBuildInputs = [
@@ -112,14 +96,14 @@ let
     ];
   };
 
-  sirit = stdenv.mkDerivation rec {
+  sirit = stdenv.mkDerivation {
     pname = "sirit";
-    version = "v1.0.2";
+    version = sources.sirit.version;
     src = fetchFromGitHub {
       owner = "eden-emulator";
       repo = "sirit";
-      rev = "${version}";
-      hash = "sha256-0wjpQm8tWHeEebSiRGs7b8LYcA2d4MEbHuffP2eSNGU=";
+      rev = sources.sirit.rev;
+      hash = sources.sirit.hash;
     };
 
     nativeBuildInputs = [
@@ -136,58 +120,52 @@ let
     ];
   };
 
-  nx_tzdb = stdenv.mkDerivation (finalAttrs: {
-    pname = "nx_tzdb";
-    version = "250725";
-    src = fetchurl {
-      url = "https://git.crueter.xyz/misc/tzdb_to_nx/releases/download/${finalAttrs.version}/${finalAttrs.version}.zip";
-      hash = "sha256-xYT/3Uzy9VGh0DaK5ouhOsCqDwu3uxkMSp++ZIL0Gcs=";
-    };
-
-    nativeBuildInputs = [ unzip ];
-    buildCommand = ''
-      unzip $src -d $out
-    '';
-
-  });
+  nx_tzdb = builtins.fetchTarball {
+    url = "https://git.crueter.xyz/misc/tzdb_to_nx/releases/download/${sources.nx_tzdb.version}/${sources.nx_tzdb.version}.tar.gz";
+    sha256 = sources.nx_tzdb.hash;
+  };
 
   xbyak_new = xbyak.overrideAttrs (_: {
-    version = "7.22";
+    version = sources.xbyak.version;
     src = fetchFromGitHub {
       owner = "herumi";
       repo = "xbyak";
-      rev = "4e44f4614ddbf038f2a6296f5b906d5c72691e0f";
-      hash = "sha256-ZmdOjO5MbY+z+hJEVgpQzoYGo5GAFgwAPiv4vs/YMUA=";
+      rev = sources.xbyak.rev;
+      hash = sources.xbyak.hash;
     };
   });
 
-  frozen = stdenv.mkDerivation (_: rec {
+  frozen = stdenv.mkDerivation {
     pname = "frozen";
-    version = "61dce5ae18ca59931e27675c468e64118aba8744";
+    version = "unstable";
     src = fetchFromGitHub {
       owner = "serge-sans-paille";
       repo = "frozen";
-      rev = "${version}";
-      hash = "sha256-zIczBSRDWjX9hcmYWYkbWY3NAAQwQtKhMTeHlYp4BKk=";
+      rev = sources.frozen.rev;
+      hash = sources.frozen.hash;
     };
 
     nativeBuildInputs = [
       cmake
     ];
-  });
+  };
 
 in
 stdenv.mkDerivation (finalAttrs: {
   pname = "eden";
-  version = "v0.1.1";
+  version = sources.eden.version;
   src = fetchFromGitea {
     domain = "git.eden-emu.dev";
     owner = "eden-emu";
     repo = "eden";
-    rev = "385b7cad77c3546082087c3993a3944c2050dd15";
-    hash = "sha256-tkro7ZHgn2809Utf/Li5+OiseywyQKH15eqphxlJZQQ=";
+    rev = sources.eden.rev;
+    hash = sources.eden.hash;
     fetchSubmodules = true;
   };
+
+  patches = [
+    ./discord-rpc-compat.patch
+  ];
 
   nativeBuildInputs = [
     cmake
@@ -272,11 +250,11 @@ stdenv.mkDerivation (finalAttrs: {
     # enable some optional features
     (lib.cmakeBool "YUZU_USE_QT_WEB_ENGINE" true)
     (lib.cmakeBool "YUZU_USE_QT_MULTIMEDIA" true)
-    (lib.cmakeBool "USE_DISCORD_PRESENCE" false)
+    (lib.cmakeBool "USE_DISCORD_PRESENCE" true)
 
     # We dont want to bother upstream with potentially outdated compat reports
     (lib.cmakeBool "YUZU_ENABLE_COMPATIBILITY_REPORTING" false)
-    (lib.cmakeBool "ENABLE_COMPATIBILITY_LIST_DOWNLOAD" false)
+    (lib.cmakeBool "ENABLE_COMPATIBILITY_LIST_DOWNLOAD" true)
 
     (lib.cmakeFeature "TITLE_BAR_FORMAT_IDLE" "eden | ${finalAttrs.version} (nixpkgs) {}")
     (lib.cmakeFeature "TITLE_BAR_FORMAT_RUNNING" "eden | ${finalAttrs.version} (nixpkgs) | {}")
@@ -294,12 +272,15 @@ stdenv.mkDerivation (finalAttrs: {
     "--prefix LD_LIBRARY_PATH : ${vulkan-loader}/lib"
   ];
 
-  postConfigure = ''
-    ln -sf ${compat-list} ./dist/compatibility_list/compatbility_list.json
+  preConfigure = ''
+    # Provide version info for builds without .git
+    echo "${finalAttrs.version}" > GIT-REFSPEC
+    echo "${sources.eden.rev}" > GIT-COMMIT
+    echo "${finalAttrs.version}" > GIT-TAG
   '';
 
   postInstall = ''
-    install -Dm44 $src/dist/72-yuzu-input.rules $out/lib/udev/rules.d/72-yuzu-input.rules
+    install -Dm644 $src/dist/72-yuzu-input.rules $out/lib/udev/rules.d/72-yuzu-input.rules
   '';
 
   meta = {

@@ -1,0 +1,29 @@
+{
+  "eden": {
+    "version": "v0.2.0-rc1",
+    "rev": "8e373eb714aa01117ec885680477501cdb572112",
+    "hash": "sha256-6vUtNI4lqPffcCpctVv0tDfoqTShaUDGNPEOmfmnkbU="
+  },
+  "sirit": {
+    "version": "v1.0.4",
+    "rev": "e3cf3924bf15875ea4ec8bf6af9d693dc2266db1",
+    "hash": "sha256-ThyUaoVmnYz9eQ1a19BbLhqfOpPxRjSovBl2wvlfRoI="
+  },
+  "mcl": {
+    "rev": "5fc4beaf331037649b10625736b41365defb4f50",
+    "hash": "sha256-7lHOjlUvCQsct/pijn0M0OOG5LpExmXwB6kH+ostA2I="
+  },
+  "frozen": {
+    "rev": "61dce5ae18ca59931e27675c468e64118aba8744",
+    "hash": "sha256-zIczBSRDWjX9hcmYWYkbWY3NAAQwQtKhMTeHlYp4BKk="
+  },
+  "xbyak": {
+    "version": "7.33.3",
+    "rev": "3fe4856d12a44603dee3eced00f242e279666757",
+    "hash": "sha256-dZgEjyVwr2Bg49k6f5yETLHsk+LevNdvq0BOCZsZ3nA="
+  },
+  "nx_tzdb": {
+    "version": "120226",
+    "hash": "sha256-PzOr1TYVuC1h9MC/jRlxz9n5HvVQUHwPLUh/UjOhmrc="
+  }
+}

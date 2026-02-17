@@ -1,0 +1,18 @@
+--- a/src/qt_common/discord/discord_impl.cpp
++++ b/src/qt_common/discord/discord_impl.cpp
+@@ -84,7 +84,6 @@
+     presence.smallImageKey = DEFAULT_DISCORD_IMAGE;
+     presence.smallImageText = DEFAULT_DISCORD_TEXT;
+     presence.state = game_title.c_str();
+-    presence.status_display_type = DiscordStatusDisplayType_State;
+     presence.details = "Currently in game";
+     presence.startTimestamp = start_time;
+     Discord_UpdatePresence(&presence);
+@@ -124,7 +123,6 @@
+     DiscordRichPresence presence{};
+     presence.largeImageKey = DEFAULT_DISCORD_IMAGE;
+     presence.largeImageText = DEFAULT_DISCORD_TEXT;
+-    presence.status_display_type = DiscordStatusDisplayType_Name;
+     presence.details = "Currently not in game";
+     presence.startTimestamp = start_time;
+     Discord_UpdatePresence(&presence);
