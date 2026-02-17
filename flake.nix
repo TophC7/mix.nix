@@ -2,10 +2,8 @@
   description = "mix.nix - A NixOS library, modules, and packages collection for infrastructure and desktop";
 
   inputs = {
-    # Pinned to known-working revision (pre-env validation breakage)
-    # TODO: Return to nixos-unstable once treewide NIX_LDFLAGS fix lands
-    nixpkgs.url = "github:NixOS/nixpkgs/62c8382960464ceb98ea593cb8321a2cf8f9e3e5";
-    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-25.11";
 
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
