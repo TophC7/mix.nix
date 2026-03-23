@@ -105,10 +105,12 @@
           EOF
 
           # Generate all templates
+          # --source-color-index 0: auto-select first (most prominent) color
           matugen image ${image} \
             --type ${scheme} \
             --mode ${polarity} \
-            --config config.toml
+            --config config.toml \
+            --source-color-index 0
         '';
 
     # Generate TOML configuration for matugen templates
