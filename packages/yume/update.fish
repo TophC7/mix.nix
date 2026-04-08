@@ -40,13 +40,15 @@ end
 set -l latestUrl "https://github.com/aofp/yume/releases/download/v$latestVersion/yume_{$latestVersion}_amd64.deb"
 
 echo "Prefetching $latestUrl..."
-set -l sha256 (nix-prefetch-url --type sha256 "$latestUrl" 2>/dev/null)
+set -l prefetchOutput (nix-prefetch-url --type sha256 "$latestUrl" 2>&1)
 
-if test -z "$sha256"
+if test $status -ne 0
     echo "Error: Failed to prefetch release"
+    echo $prefetchOutput >&2
     exit 1
 end
 
+set -l sha256 (echo $prefetchOutput | tail -1)
 set -l latestHash (nix-hash --to-sri --type sha256 $sha256)
 
 # Update version.json

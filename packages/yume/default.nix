@@ -13,7 +13,6 @@ let
     fetchurl
     autoPatchelfHook
     dpkg
-    makeWrapper
     wrapGAppsHook3
     gtk3
     webkitgtk_4_1
@@ -48,7 +47,6 @@ stdenv.mkDerivation {
   nativeBuildInputs = [
     autoPatchelfHook
     dpkg
-    makeWrapper
     wrapGAppsHook3
   ];
 
@@ -86,17 +84,19 @@ stdenv.mkDerivation {
     runHook postInstall
   '';
 
-  # Point the Tauri binary at its resources
-  postFixup = ''
-    wrapProgram $out/bin/yume \
-      --set WEBKIT_DISABLE_COMPOSITING_MODE 1 \
+  # WebKitGTK dlopen's media/plugin libraries at runtime, not covered by autoPatchelfHook RPATH
+  preFixup = ''
+    gappsWrapperArgs+=(
+      --set WEBKIT_DISABLE_COMPOSITING_MODE 1
       --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath runtimeLibs}"
+    )
   '';
 
   meta = {
     description = "Native desktop UI for Claude Code";
     homepage = "https://github.com/aofp/yume";
     changelog = "https://github.com/aofp/yume/releases/tag/v${versionInfo.version}";
+    license = lib.licenses.unfree;
     mainProgram = "yume";
     platforms = [ "x86_64-linux" ];
   };
