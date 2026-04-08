@@ -5,31 +5,19 @@
 # Refreshes every mutable hash in packages/t3code-desktop/version.json:
 #
 #   1. electrobun.{version,cliHash,coreHash}
-#      - If --electrobun is passed, uses that version tag.
-#      - Otherwise checks GitHub for the latest upstream release and uses it.
-#      - cli and core tarballs are prefetched and hashed.
+#      - Default: latest upstream release. Override with --electrobun=VERSION.
+#      - cli and core tarballs are prefetched in parallel.
 #
-#   2. icon.{rev,hash}
-#      - Follows packages/t3code/version.json's `rev` so the icon always
-#        matches whatever commit t3code itself is pinned to.
-#
-#   3. bunDepsHash
-#      - Sentineled to a fake hash, nix build is run, the "got:" line from
-#        the resulting hash-mismatch error is captured and written back.
-#        Same pattern as packages/t3code/update.fish.
-#
-# After writing the new version.json a verification build is run; if it
-# fails, a warning is printed but version.json is NOT reverted (partial
-# state is more debuggable than rolled-back state for this package).
+#   2. bunDepsHash
+#      - Sentineled, discovered from a nix build's hash-mismatch error.
 #
 # Usage:
-#   ./update.fish                    # latest electrobun + icon sync
+#   ./update.fish                    # latest electrobun
 #   ./update.fish --electrobun=1.17.0   # pin a specific electrobun version
 #   ./update.fish --deps-only        # only refresh bunDepsHash
 
 set -l scriptDir (dirname (status filename))
 set -l versionFile "$scriptDir/version.json"
-set -l t3codeVersionFile "$scriptDir/../t3code/version.json"
 
 for cmd in curl jq nix-prefetch-url nix awk
     if not command -q $cmd
@@ -46,7 +34,7 @@ for arg in $argv
     switch $arg
         case '--electrobun=*'
             set electrobunVersionOverride (string replace '--electrobun=' '' -- $arg)
-        case '--deps-only'
+        case --deps-only
             set depsOnly 1
         case '*'
             echo "Error: Unknown argument: $arg"
@@ -97,14 +85,25 @@ set -l newElectrobunCoreHash (jq -r .electrobun.coreHash <$versionFile)
 
 if test "$targetElectrobun" != "$currentElectrobun"
     echo "[electrobun] $currentElectrobun -> $targetElectrobun"
-    echo "[electrobun] Prefetching cli tarball..."
-    set newElectrobunCliHash (prefetchSriHash "https://github.com/blackboardsh/electrobun/releases/download/v$targetElectrobun/electrobun-cli-linux-x64.tar.gz")
+    echo "[electrobun] Prefetching cli + core tarballs in parallel..."
+
+    # Parallel prefetch via temp files: fish command substitution can't be
+    # backgrounded directly, so we redirect each job's stdout and read it
+    # back after `wait`. Halves wall clock vs. serial fetches.
+    set -l cliTmp (mktemp)
+    set -l coreTmp (mktemp)
+    prefetchSriHash "https://github.com/blackboardsh/electrobun/releases/download/v$targetElectrobun/electrobun-cli-linux-x64.tar.gz" >$cliTmp &
+    prefetchSriHash "https://github.com/blackboardsh/electrobun/releases/download/v$targetElectrobun/electrobun-core-linux-x64.tar.gz" >$coreTmp &
+    wait
+
+    set newElectrobunCliHash (string trim <$cliTmp)
+    set newElectrobunCoreHash (string trim <$coreTmp)
+    rm -f $cliTmp $coreTmp
+
     if test -z "$newElectrobunCliHash"
         echo "Error: Failed to fetch electrobun cli tarball for $targetElectrobun"
         exit 1
     end
-    echo "[electrobun] Prefetching core tarball..."
-    set newElectrobunCoreHash (prefetchSriHash "https://github.com/blackboardsh/electrobun/releases/download/v$targetElectrobun/electrobun-core-linux-x64.tar.gz")
     if test -z "$newElectrobunCoreHash"
         echo "Error: Failed to fetch electrobun core tarball for $targetElectrobun"
         exit 1
@@ -113,26 +112,7 @@ else
     echo "[electrobun] Already at $currentElectrobun"
 end
 
-# ── 2. Icon follows t3code's rev ─────────────────────────────────────────────
-
-set -l currentIconRev (jq -r .icon.rev <$versionFile)
-set -l newIconRev (jq -r .rev <$t3codeVersionFile)
-set -l newIconHash (jq -r .icon.hash <$versionFile)
-
-if test "$depsOnly" != 1 -a "$newIconRev" != "$currentIconRev"
-    echo "[icon] $currentIconRev -> $newIconRev"
-    echo "[icon] Prefetching icon at new t3code rev..."
-    set newIconHash (prefetchSriHash "https://raw.githubusercontent.com/pingdotgg/t3code/$newIconRev/assets/prod/black-universal-1024.png")
-    if test -z "$newIconHash"
-        echo "Error: Failed to fetch icon at rev $newIconRev"
-        exit 1
-    end
-else
-    echo "[icon] Already at "(string sub -l 7 $currentIconRev)" (matches t3code)"
-    set newIconRev $currentIconRev
-end
-
-# ── 3. bunDepsHash via sentinel + nix build ──────────────────────────────────
+# ── 2. bunDepsHash via sentinel + nix build ──────────────────────────────────
 
 set -l fakeHash "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
@@ -142,22 +122,17 @@ jq -n \
     --arg ebCliHash "$newElectrobunCliHash" \
     --arg ebCoreHash "$newElectrobunCoreHash" \
     --arg bunDepsHash "$fakeHash" \
-    --arg iconRev "$newIconRev" \
-    --arg iconHash "$newIconHash" \
     '{
         electrobun: {version: $ebVersion, cliHash: $ebCliHash, coreHash: $ebCoreHash},
-        bunDepsHash: $bunDepsHash,
-        icon: {rev: $iconRev, hash: $iconHash}
+        bunDepsHash: $bunDepsHash
     }' >$versionFile
 
 echo "[bun-deps] Running nix build to discover bunDepsHash..."
 set -l buildOutput (nix build --no-link "$flakeRoot#t3code-desktop" 2>&1)
 
-# IMPORTANT: fish command substitution splits output on newlines into
-# separate list elements; `echo $var` would re-join them with spaces,
-# which collapses the multi-line build output into a single line and
-# breaks awk's per-line matching. `string join \n` preserves the
-# original line structure.
+# `string join \n --` preserves newlines (fish splits command substitution
+# into per-line list elements; `echo $var` would re-join with spaces and
+# defeat awk's per-line matching).
 set -l newBunDepsHash (string join \n -- $buildOutput | awk '
     /hash mismatch in fixed-output derivation/ {
         if ($0 ~ /t3code-desktop-bun-deps-/) {
@@ -194,12 +169,9 @@ jq -n \
     --arg ebCliHash "$newElectrobunCliHash" \
     --arg ebCoreHash "$newElectrobunCoreHash" \
     --arg bunDepsHash "$newBunDepsHash" \
-    --arg iconRev "$newIconRev" \
-    --arg iconHash "$newIconHash" \
     '{
         electrobun: {version: $ebVersion, cliHash: $ebCliHash, coreHash: $ebCoreHash},
-        bunDepsHash: $bunDepsHash,
-        icon: {rev: $iconRev, hash: $iconHash}
+        bunDepsHash: $bunDepsHash
     }' >$versionFile
 
 # ── Verify ───────────────────────────────────────────────────────────────────

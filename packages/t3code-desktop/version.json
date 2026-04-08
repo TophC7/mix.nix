@@ -4,9 +4,5 @@
     "cliHash": "sha256-lBKJBx4oSEl/mo67cKrlbuwd07dQYJrgxjQxZzZe5m0=",
     "coreHash": "sha256-p0aLbSaT4OV2jajdU+ecSC1D0rU5dykqbU1RwBIpYIQ="
   },
-  "bunDepsHash": "sha256-SPXONtPW+uoLh3zBkfzPjmsCfMP+Ika+VOyfwIvMYZ4=",
-  "icon": {
-    "rev": "28e481eb24dc7e790b6d1ea963f20024b6a2bbc4",
-    "hash": "sha256-E7Nd8I7BQ/s54LVjWQRTnvohyHPE6cKwxE1ciSPzeAM="
-  }
+  "bunDepsHash": "sha256-SPXONtPW+uoLh3zBkfzPjmsCfMP+Ika+VOyfwIvMYZ4="
 }

@@ -1,16 +1,28 @@
-// T3 Code desktop shell
+// T3 Code desktop shell.
 //
 // Spawns the `t3` CLI as a child process, waits for its HTTP server to
 // actually serve a response (not just accept TCP), then opens an Electrobun
-// window pointed at it. The HTTP probe is important: TCP accept happens as
-// soon as `net.listen()` runs, before route handlers are mounted, and
-// opening the webview during that window results in a blank white screen
-// that never recovers.
+// window pointed at it.
 //
-// Config via env vars:
-//   T3CODE_DESKTOP_BIN   - path to the `t3` executable (defaults to "t3")
-//   T3CODE_DESKTOP_PORT  - port to bind (defaults to a fixed local port)
-//   T3CODE_DESKTOP_HOST  - host to bind (defaults to 127.0.0.1)
+// Two subtleties that are easy to get wrong:
+//
+//   1. TCP accept readiness is not enough. `net.listen()` accepts
+//      connections before route handlers are mounted, so opening the
+//      webview during that window results in a permanent white screen.
+//      We do an actual HTTP GET and require a <500 response.
+//
+//   2. Electrobun's GTK FFI loop blocks JS signal delivery, so
+//      `process.on("SIGTERM", ...)` can't be relied on for child cleanup.
+//      The Nix derivation ships a tiny `pdeath-exec` C shim that calls
+//      prctl(PR_SET_PDEATHSIG, SIGTERM) before execvp'ing t3, so the
+//      kernel tears down the child the instant bun dies. We opt into it
+//      via T3CODE_DESKTOP_PDEATH_EXEC.
+//
+// Env vars:
+//   T3CODE_DESKTOP_BIN          - path to the `t3` executable (default "t3")
+//   T3CODE_DESKTOP_PORT         - port to bind (default 18822)
+//   T3CODE_DESKTOP_HOST         - host to bind (default 127.0.0.1)
+//   T3CODE_DESKTOP_PDEATH_EXEC  - optional pdeath-exec shim path
 
 import { spawn } from "bun";
 import { BrowserWindow } from "electrobun/bun";
@@ -18,9 +30,6 @@ import { BrowserWindow } from "electrobun/bun";
 const t3Bin = process.env["T3CODE_DESKTOP_BIN"] ?? "t3";
 const host = process.env["T3CODE_DESKTOP_HOST"] ?? "127.0.0.1";
 
-// Parse and validate the port env var. Number("not-a-number") gives NaN,
-// Number("99999") gives an out-of-range value; both are rejected up front
-// with a clear error instead of producing malformed URLs downstream.
 const portRaw = process.env["T3CODE_DESKTOP_PORT"] ?? "18822";
 const port = Number(portRaw);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -30,35 +39,44 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 	process.exit(2);
 }
 
-// Optional parent-death exec shim provided by the Nix derivation (a tiny C
-// binary that calls prctl(PR_SET_PDEATHSIG, SIGTERM) before execvp'ing its
-// target). Wrapping t3 in this shim ensures the kernel kills it the
-// instant we (its direct parent) die -- even if Electrobun's GTK FFI loop
-// has blocked signal delivery in our own JS event loop, which prevents
-// process.on("SIGTERM", ...) from firing reliably.
 const pdeathExec = process.env["T3CODE_DESKTOP_PDEATH_EXEC"];
 
-// Start the server. --no-browser keeps it from opening the user's default
-// browser -- we'll show the UI in our own window instead.
-const t3Cmd = ["--no-browser", "--port", String(port), "--host", host];
+const baseCmd = [t3Bin, "--no-browser", "--port", String(port), "--host", host];
 const t3Proc = spawn({
-	cmd: pdeathExec
-		? [pdeathExec, t3Bin, ...t3Cmd]
-		: [t3Bin, ...t3Cmd],
+	cmd: pdeathExec ? [pdeathExec, ...baseCmd] : baseCmd,
 	stdout: "inherit",
 	stderr: "inherit",
 });
 
-// Probe the HTTP root. TCP accept readiness is NOT enough -- `net.listen()`
-// accepts connections before route handlers are mounted on some Node HTTP
-// servers, so if we open the webview during that window it sees a failed
-// response and stays white. An actual HTTP GET with a 2xx body is the
-// only reliable "ready" signal.
-//
-// We also require TWO consecutive successful probes before declaring
-// ready: this closes the race where the server transitions from "listen"
-// to "routes mounted" between our first probe and the webview's first
-// navigation.
+// Retry on transient network errors while the server is booting. Bun uses
+// symbolic codes without glibc's `E` prefix ("ConnectionRefused"); Node uses
+// the glibc names ("ECONNREFUSED"); accept both.
+const RETRIABLE_CODES = new Set([
+	"ConnectionRefused",
+	"ConnectionReset",
+	"ConnectionClosed",
+	"CanceledRequest",
+	"ECONNREFUSED",
+	"ECONNRESET",
+	"ENOTFOUND",
+	"ETIMEDOUT",
+]);
+const RETRIABLE_NAMES = new Set(["TimeoutError", "AbortError"]);
+
+function isRetriableFetchError(err: unknown): boolean {
+	if (!(err instanceof Error)) return false;
+	const code = (err as NodeJS.ErrnoException).code;
+	if (code && RETRIABLE_CODES.has(code)) return true;
+	if (RETRIABLE_NAMES.has(err.name)) return true;
+	// Bun sometimes throws a plain `TypeError: fetch failed` with no code.
+	// Narrow on the message so real TypeErrors from buggy code aren't
+	// silently treated as "still booting".
+	return err.name === "TypeError" && /fetch failed/i.test(err.message);
+}
+
+// Require two consecutive successful probes: the first proves routes are
+// mounted, the second closes a small window where the server answers once
+// and then blocks (e.g. a slow middleware warming up).
 async function waitForHttp(
 	baseUrl: string,
 	timeoutMs: number,
@@ -70,43 +88,18 @@ async function waitForHttp(
 	while (Date.now() < deadline) {
 		try {
 			const res = await fetch(baseUrl, {
-				signal: AbortSignal.timeout(2000),
+				signal: AbortSignal.timeout(1000),
 				redirect: "manual", // a redirect still counts as "server is up"
 			});
-			// Drain the body so we know the server actually produced a response,
-			// not just headers and an immediate close.
-			await res.arrayBuffer();
-
-			// Treat any <500 status as "server is alive and routing"; t3's
-			// root may 302 to a login or 200 the SPA shell, both fine.
+			res.body?.cancel();
 			if (res.status < 500) {
 				consecutiveOk += 1;
 				if (consecutiveOk >= required) return;
-				await Bun.sleep(100);
 				continue;
 			}
 			consecutiveOk = 0;
 		} catch (err) {
-			// Connection refused, reset, timeouts, DNS-in-progress: expected
-			// while the server is still booting. Bun's fetch uses symbolic
-			// error codes without the glibc `E` prefix ("ConnectionRefused",
-			// not "ECONNREFUSED"), and some implementations throw a plain
-			// TypeError for "fetch failed". Accept both.
-			const name = (err as Error)?.name;
-			const code = (err as NodeJS.ErrnoException)?.code;
-			const retriable =
-				code === "ConnectionRefused" ||
-				code === "ConnectionReset" ||
-				code === "ConnectionClosed" ||
-				code === "CanceledRequest" ||
-				code === "ECONNREFUSED" ||
-				code === "ECONNRESET" ||
-				code === "ENOTFOUND" ||
-				code === "ETIMEDOUT" ||
-				name === "TimeoutError" ||
-				name === "AbortError" ||
-				name === "TypeError"; // bare "fetch failed"
-			if (!retriable) throw err;
+			if (!isRetriableFetchError(err)) throw err;
 			consecutiveOk = 0;
 		}
 		await Bun.sleep(100);
@@ -120,8 +113,7 @@ const baseUrl = `http://${host}:${port}`;
 
 // Race the HTTP-readiness probe against the subprocess's own exit promise.
 // If t3 crashes at startup (bad flag, port in use, internal error) we'd
-// otherwise poll for 15 seconds and then open a window at a dead server.
-// Whichever promise resolves first tells us what happened.
+// otherwise poll for the full timeout and then open a window at a dead server.
 type ReadyResult = { kind: "ready" } | { kind: "exited"; code: number | null };
 try {
 	const result: ReadyResult = await Promise.race([
@@ -136,34 +128,35 @@ try {
 	}
 } catch (err) {
 	console.error("[t3code-desktop]", err);
-	t3Proc.kill();
+	try {
+		t3Proc.kill();
+	} catch {
+		/* already exited */
+	}
 	process.exit(1);
 }
 
-// Clean-shutdown path (window close / Electrobun quit()): fire an explicit
-// kill on the child so we don't leak it while the process is still
-// responsive. When control never returns to JS (launcher killed externally,
-// Electrobun FFI loop blocking), none of these handlers fire -- the
-// pdeath-exec wrapper handles that case at the kernel level by killing the
-// t3 child as soon as bun exits.
+// Belt-and-suspenders for the rare case where JS IS still running on
+// shutdown (window close / Electrobun quit()). The usual kill path is
+// pdeath-exec at the kernel level -- see header.
 const cleanup = () => {
 	try {
 		t3Proc.kill();
-	} catch {}
+	} catch {
+		/* already exited */
+	}
 };
-process.on("exit", cleanup);
-process.on("SIGINT", () => {
-	cleanup();
-	process.exit(130);
-});
-process.on("SIGTERM", () => {
-	cleanup();
-	process.exit(143);
-});
-process.on("SIGHUP", () => {
-	cleanup();
-	process.exit(129);
-});
+const signalExitCodes: Record<string, number> = {
+	SIGINT: 130,
+	SIGTERM: 143,
+	SIGHUP: 129,
+};
+for (const [sig, code] of Object.entries(signalExitCodes)) {
+	process.on(sig, () => {
+		cleanup();
+		process.exit(code);
+	});
+}
 
 new BrowserWindow({
 	title: "T3 Code",
