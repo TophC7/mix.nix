@@ -22,6 +22,7 @@
 //   T3CODE_DESKTOP_BIN          - path to the `t3` executable (default "t3")
 //   T3CODE_DESKTOP_PORT         - port to bind (default 18822)
 //   T3CODE_DESKTOP_HOST         - host to bind (default 127.0.0.1)
+//   T3CODE_DESKTOP_CWD          - working directory for t3 (default $HOME)
 //   T3CODE_DESKTOP_PDEATH_EXEC  - optional pdeath-exec shim path
 
 import { spawn } from "bun";
@@ -41,9 +42,16 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 
 const pdeathExec = process.env["T3CODE_DESKTOP_PDEATH_EXEC"];
 
+// Electrobun's launcher chdir's into the app bundle's bin/ directory before
+// running our entrypoint. Without an explicit cwd the t3 CLI inherits that
+// path, sees "bin" as the project name, and creates a phantom project on
+// every launch. Default to $HOME so t3 starts in a sensible location.
+const cwd = process.env["T3CODE_DESKTOP_CWD"] ?? process.env["HOME"];
+
 const baseCmd = [t3Bin, "--no-browser", "--port", String(port), "--host", host];
 const t3Proc = spawn({
 	cmd: pdeathExec ? [pdeathExec, ...baseCmd] : baseCmd,
+	cwd,
 	stdout: "inherit",
 	stderr: "inherit",
 });

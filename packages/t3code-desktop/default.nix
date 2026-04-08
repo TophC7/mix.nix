@@ -136,6 +136,7 @@ stdenv.mkDerivation {
     pkgs.zstd # for extracting the stable-build .tar.zst artifact
     pkgs.makeBinaryWrapper
     pkgs.autoPatchelfHook
+    pkgs.imagemagick # for resizing icons to standard hicolor sizes
   ];
 
   buildInputs = runtimeLibs;
@@ -208,8 +209,19 @@ stdenv.mkDerivation {
 
     # Icon pulled from t3code's own source tree so it follows its rev
     # automatically -- no separate fetchurl/hash to maintain.
-    install -Dm644 ${t3code.src}/assets/prod/black-universal-1024.png \
+    # Install at standard hicolor sizes -- many DEs skip 1024x1024.
+    local src_icon="${t3code.src}/assets/prod/black-universal-1024.png"
+    for size in 16 24 32 48 64 128 256 512; do
+      install -Dm644 /dev/null "$out/share/icons/hicolor/''${size}x''${size}/apps/t3code-desktop.png"
+      magick "$src_icon" -resize "''${size}x''${size}" \
+        "$out/share/icons/hicolor/''${size}x''${size}/apps/t3code-desktop.png"
+    done
+    # Keep the original 1024 as-is
+    install -Dm644 "$src_icon" \
       "$out/share/icons/hicolor/1024x1024/apps/t3code-desktop.png"
+    # pixmaps fallback for DEs that don't walk hicolor
+    install -Dm644 /dev/null "$out/share/pixmaps/t3code-desktop.png"
+    magick "$src_icon" -resize 256x256 "$out/share/pixmaps/t3code-desktop.png"
 
     install -Dm644 ${desktopItem}/share/applications/t3code-desktop.desktop \
       "$out/share/applications/t3code-desktop.desktop"
