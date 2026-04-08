@@ -6,7 +6,7 @@
 # Usage:
 #   pkgs.yume
 #
-{ lib, pkgs, ... }:
+{ lib, pkgs, claude ? pkgs.claude-code or null, ... }:
 let
   inherit (pkgs)
     stdenv
@@ -89,6 +89,7 @@ stdenv.mkDerivation {
     gappsWrapperArgs+=(
       --set WEBKIT_DISABLE_COMPOSITING_MODE 1
       --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath runtimeLibs}"
+      ${lib.optionalString (claude != null) "--set CLAUDE_PATH ${lib.getExe claude}"}
     )
   '';
 
