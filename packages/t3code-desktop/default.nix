@@ -188,6 +188,24 @@ stdenv.mkDerivation {
     # their DT_NEEDED entries still reference Ubuntu paths.
     autoPatchelf "$out/share/t3code-desktop/app/bin"
 
+    # libNativeWrapper.so ships with the WM_CLASS ("ElectrobunKitchenSink-dev")
+    # of Electrobun's own example app hardcoded into its .rodata -- it's
+    # passed to gtk_window_set_wmclass() at window creation time, which is
+    # what Wayland compositors read as app_id and what .desktop-file icon
+    # matching keys off of. Overwrite the string in place with our actual
+    # identifier (padded with NULs so byte-length is preserved, leaving
+    # surrounding pointer offsets undisturbed).
+    libWrapper="$out/share/t3code-desktop/app/bin/libNativeWrapper.so"
+    chmod u+w "$libWrapper"
+    offset=$(grep -abo 'ElectrobunKitchenSink-dev' "$libWrapper" | head -1 | cut -d: -f1)
+    if [ -z "$offset" ]; then
+      echo "error: libNativeWrapper.so no longer contains the hardcoded WM_CLASS string;" >&2
+      echo "       upstream Electrobun may have fixed the bug -- drop this patch." >&2
+      exit 1
+    fi
+    printf 't3code-desktop\0\0\0\0\0\0\0\0\0\0\0' \
+      | dd of="$libWrapper" bs=1 seek="$offset" count=25 conv=notrunc status=none
+
     # Icon pulled from t3code's own source tree so it follows its rev
     # automatically -- no separate fetchurl/hash to maintain.
     install -Dm644 ${t3code.src}/assets/prod/black-universal-1024.png \
