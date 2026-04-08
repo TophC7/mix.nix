@@ -38,6 +38,33 @@ let
     hash = "sha256-p0aLbSaT4OV2jajdU+ecSC1D0rU5dykqbU1RwBIpYIQ=";
   };
 
+  # Upstream icon, pinned by commit so the hash is stable even after main
+  # moves. 1024x1024 PNG -- the XDG hicolor theme picks the right size at
+  # display time, and most icon renderers downscale cleanly.
+  icon = fetchurl {
+    url = "https://raw.githubusercontent.com/pingdotgg/t3code/28e481eb24dc7e790b6d1ea963f20024b6a2bbc4/assets/prod/black-universal-1024.png";
+    hash = "sha256-E7Nd8I7BQ/s54LVjWQRTnvohyHPE6cKwxE1ciSPzeAM=";
+  };
+
+  # The XDG desktop entry. `StartupWMClass` must match what Electrobun sets
+  # as its window class so task-bar grouping works; it uses the app.name
+  # from electrobun.config.ts ("t3code-desktop-dev" on dev builds -- match
+  # to whatever electrobun build emits).
+  desktopItem = pkgs.makeDesktopItem {
+    name = "t3code-desktop";
+    desktopName = "T3 Code";
+    genericName = "Coding Agent UI";
+    comment = "Minimal web GUI for coding agents (Codex, Claude Code)";
+    exec = "t3code-desktop";
+    icon = "t3code-desktop";
+    categories = [
+      "Development"
+      "Utility"
+    ];
+    startupNotify = true;
+    terminal = false;
+  };
+
   # Runtime libraries the Electrobun launcher + libNativeWrapper.so link
   # against on Linux. system-webview (no CEF) means we need webkit2gtk-4.1
   # plus its GTK stack. autoPatchelfHook rewrites DT_NEEDED entries to point
@@ -170,6 +197,16 @@ stdenv.mkDerivation (finalAttrs: {
     # RPATHs to point at the store paths of the buildInputs we already
     # declared.
     autoPatchelf "$out/share/t3code-desktop/app/bin"
+
+    # XDG icon: installing the 1024x1024 PNG under hicolor/1024x1024/apps/
+    # lets desktop environments scale it down for menus, docks, and task
+    # switchers. The basename must match the Icon= field in the .desktop
+    # entry ("t3code-desktop").
+    install -Dm644 ${icon} "$out/share/icons/hicolor/1024x1024/apps/t3code-desktop.png"
+
+    # XDG desktop entry for app launchers / menus.
+    install -Dm644 ${desktopItem}/share/applications/t3code-desktop.desktop \
+      "$out/share/applications/t3code-desktop.desktop"
 
     # Launcher: set T3CODE_DESKTOP_BIN to our already-packaged t3 so the
     # shell app's spawn() finds it without PATH setup, then exec the

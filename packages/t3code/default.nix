@@ -34,67 +34,84 @@ let
     hash = versionInfo.hash;
   };
 
-  # Fixed-output derivation: installs all Bun workspace dependencies
-  # with network access (allowed only for FoDs) and captures the resulting
-  # node_modules trees. Because outputHash is pinned, any drift in the
-  # lockfile or registry content produces a hash mismatch and fails loudly.
-  bunDeps = stdenvNoCC.mkDerivation {
-    pname = "t3code-bun-deps";
-    version = versionInfo.version;
-    inherit src;
+  # Two separate dependency trees:
+  #
+  #   bunDeps         - full install (dependencies + devDependencies).
+  #                     Needed at BUILD time so turbo, tsdown, oxlint,
+  #                     vitest, etc. are on hand to run the build graph.
+  #
+  #   bunRuntimeDeps  - production-only install. The shipped node_modules
+  #                     under $out is populated from this tree, which cuts
+  #                     ~700MB of dev tooling out of the final closure.
+  #
+  # Both are fixed-output derivations (network allowed, hash-pinned). Each
+  # has its own hash because --production changes the resolved set.
+  mkBunDeps =
+    { nameSuffix, production }:
+    stdenvNoCC.mkDerivation {
+      pname = "t3code-bun-deps${nameSuffix}";
+      version = versionInfo.version;
+      inherit src;
 
-    nativeBuildInputs = [
-      pkgs.bun
-      pkgs.cacert
-      pkgs.nodejs_24 # for native module builds (node-pty via node-gyp)
-      pkgs.python3 # node-gyp requires python
-      pkgs.pkg-config
-    ];
+      nativeBuildInputs = [
+        pkgs.bun
+        pkgs.cacert
+        pkgs.nodejs_24
+        pkgs.python3
+        pkgs.pkg-config
+      ];
 
-    dontConfigure = true;
-    dontBuild = true;
-    dontFixup = true;
+      dontConfigure = true;
+      dontBuild = true;
+      dontFixup = true;
 
-    # `bun install` writes into a few places. We funnel everything into a
-    # tempdir HOME so the build is self-contained, then harvest node_modules
-    # directories from the workspace tree and drop them into $out with the
-    # same relative paths so the main derivation can copy them back in.
-    installPhase = ''
-      runHook preInstall
+      installPhase = ''
+        runHook preInstall
 
-      export HOME=$(mktemp -d)
-      export BUN_INSTALL="$HOME/.bun"
+        export HOME=$(mktemp -d)
+        export BUN_INSTALL="$HOME/.bun"
 
-      # --ignore-scripts is required because some workspace `prepare` hooks
-      # (e.g. @t3tools/contracts -> effect-language-service patch) execute
-      # binaries whose shebangs reference /usr/bin/env, which doesn't exist
-      # in the Nix sandbox. The main derivation patches shebangs and
-      # rebuilds the one native module we actually need (node-pty) after
-      # this cache is copied back in.
-      #
-      # --linker=hoisted produces a classic flat node_modules layout so
-      # Node's resolution walks cleanly from apps/server/dist/bin.mjs
-      # upward and finds everything in a single node_modules tree.
-      bun install --frozen-lockfile --ignore-scripts --linker=hoisted
+        # --ignore-scripts is required because some workspace `prepare` hooks
+        # (e.g. @t3tools/contracts -> effect-language-service patch) execute
+        # binaries whose shebangs reference /usr/bin/env, which doesn't exist
+        # in the Nix sandbox. The main derivation patches shebangs and
+        # rebuilds native modules after the cache is copied back in.
+        #
+        # --linker=hoisted produces a classic flat node_modules layout so
+        # Node's resolution walks cleanly from apps/server/dist/bin.mjs
+        # upward and finds everything in a single node_modules tree.
+        bun install --frozen-lockfile --ignore-scripts --linker=hoisted ${
+          lib.optionalString production "--production"
+        }
 
-      mkdir -p $out
-      # Capture every node_modules directory bun created. Excludes nested
-      # node_modules inside already-copied trees so we don't double-copy
-      # the same content when bun uses hoisted install layouts.
-      find . -name node_modules -type d -not -path '*/node_modules/*/node_modules*' \
-        | while read -r nm; do
-          relDir=$(dirname "$nm")
-          mkdir -p "$out/$relDir"
-          cp -a "$nm" "$out/$relDir/node_modules"
-        done
+        mkdir -p $out
+        find . -name node_modules -type d -not -path '*/node_modules/*/node_modules*' \
+          | while read -r nm; do
+            relDir=$(dirname "$nm")
+            mkdir -p "$out/$relDir"
+            cp -a "$nm" "$out/$relDir/node_modules"
+          done
 
-      runHook postInstall
-    '';
+        runHook postInstall
+      '';
 
-    outputHashMode = "recursive";
-    outputHashAlgo = "sha256";
-    outputHash = versionInfo.depsHash;
-  };
+      outputHashMode = "recursive";
+      outputHashAlgo = "sha256";
+    };
+
+  bunDeps =
+    (mkBunDeps {
+      nameSuffix = "";
+      production = false;
+    }).overrideAttrs
+      { outputHash = versionInfo.depsHash; };
+
+  bunRuntimeDeps =
+    (mkBunDeps {
+      nameSuffix = "-runtime";
+      production = true;
+    }).overrideAttrs
+      { outputHash = versionInfo.runtimeDepsHash; };
 in
 stdenv.mkDerivation (finalAttrs: {
   pname = "t3code";
@@ -153,10 +170,13 @@ stdenv.mkDerivation (finalAttrs: {
     mkdir -p "$out/share/t3code"
     cp -r apps/server/dist "$out/share/t3code/dist"
 
-    # Runtime deps: tsdown leaves npm packages as external imports, so the
-    # launcher needs node_modules at runtime. Ship the root node_modules
-    # tree (hoisted external deps + native modules like node-pty).
-    cp -a node_modules "$out/share/t3code/node_modules"
+    # Ship the production dep tree (no turbo, tsdown, oxlint, vitest, etc.).
+    # The bundled dist/bin.mjs only imports effect, @effect/platform-node,
+    # @anthropic-ai/claude-agent-sdk, @pierre/diffs, and Node built-ins,
+    # so the prod tree is enough at runtime -- but it's missing the native
+    # node-pty binary because --ignore-scripts also ran against this FoD.
+    cp -a ${bunRuntimeDeps}/node_modules "$out/share/t3code/node_modules"
+    chmod -R u+w "$out/share/t3code/node_modules"
 
     # tsdown's `noExternal: "@t3tools/"` inlines every workspace package
     # into the bundle, so the `@t3tools/*` and `t3` symlinks in node_modules
@@ -164,6 +184,15 @@ stdenv.mkDerivation (finalAttrs: {
     # and would trip the noBrokenSymlinks check. Drop them.
     rm -rf "$out/share/t3code/node_modules/@t3tools"
     rm -f "$out/share/t3code/node_modules/t3"
+
+    # Slot in the node-pty .node native binary we already rebuilt during
+    # the main build phase (buildDeps tree). Copying just the `build/`
+    # subdirectory is enough because node-pty's loader resolves it
+    # relative to its own package dir. Avoids re-running node-gyp here.
+    cp -a node_modules/node-pty/build \
+      "$out/share/t3code/node_modules/node-pty/build"
+
+    patchShebangs "$out/share/t3code/node_modules"
 
     # Launcher: Node runs the bundled CLI entry. bin.mjs is the ESM output
     # from tsdown for the `bin.ts` entry in apps/server/tsdown.config.ts.
