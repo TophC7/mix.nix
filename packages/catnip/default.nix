@@ -16,7 +16,7 @@ pkgs.stdenv.mkDerivation {
 
   src = pkgs.fetchurl {
     url = "https://github.com/wandb/catnip/releases/download/v${version}/catnip_${version}_linux_amd64.tar.gz";
-    hash = "sha256-svtD188lpZpPw42BRFprWf+OKNpFsNOfxW2VJ1uQ3bg=";
+    hash = "sha256-tEYvPnhoWM3aeG5u/tTL7plchg8ijIq6hTx7D5Bav+A=";
   };
 
   sourceRoot = ".";
