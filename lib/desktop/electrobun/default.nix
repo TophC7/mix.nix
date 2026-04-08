@@ -303,7 +303,7 @@ in
         pkgs.bun
         pkgs.nodejs_24
         pkgs.zstd
-        pkgs.makeBinaryWrapper
+        pkgs.makeWrapper
         pkgs.autoPatchelfHook
         pkgs.imagemagick
       ];
@@ -381,7 +381,11 @@ in
         install -Dm644 ${desktopItem}/share/applications/${pname}.desktop \
           "$out/share/applications/${pname}.desktop"
 
-        makeBinaryWrapper "$out/share/${pname}/app/bin/launcher" "$out/bin/${pname}" \
+        # Shell wrapper (not binary) so --run can capture the caller's $PWD
+        # before Electrobun's launcher clobbers it with its own bin/ directory.
+        makeWrapper "$out/share/${pname}/app/bin/launcher" "$out/bin/${pname}" \
+          ${lib.optionalString (mode == "command")
+            ''--run 'export ${prefix}_CWD="''${${prefix}_CWD:-$(pwd)}"' ''} \
           ${lib.concatMapStringsSep " " lib.escapeShellArg wrapperArgs}
 
         runHook postInstall
