@@ -1,20 +1,18 @@
 #!/usr/bin/env fish
 
-# Update script for t3code-desktop
+# Update script for the shared Electrobun builder
 #
-# Refreshes every mutable hash in packages/t3code-desktop/version.json:
-#
+# Refreshes lib/desktop/electrobun/version.json:
 #   1. electrobun.{version,cliHash,coreHash}
-#      - Default: latest upstream release. Override with --electrobun=VERSION.
-#      - cli and core tarballs are prefetched in parallel.
-#
+#      Default: latest upstream release. Override with --electrobun=VERSION.
 #   2. bunDepsHash
-#      - Sentineled, discovered from a nix build's hash-mismatch error.
+#      Sentineled, discovered from a nix build's hash-mismatch error.
 #
 # Usage:
-#   ./update.fish                    # latest electrobun
-#   ./update.fish --electrobun=1.17.0   # pin a specific electrobun version
-#   ./update.fish --deps-only        # only refresh bunDepsHash
+#   ./update.fish                           # latest electrobun
+#   ./update.fish --electrobun=1.17.0       # pin a specific version
+#   ./update.fish --deps-only               # only refresh bunDepsHash
+#   ./update.fish --target=catnip-desktop   # build a different app for hash discovery
 
 set -l scriptDir (dirname (status filename))
 set -l versionFile "$scriptDir/version.json"
@@ -30,15 +28,18 @@ end
 
 set -l electrobunVersionOverride ""
 set -l depsOnly 0
+set -l buildTarget "t3code-desktop"
 for arg in $argv
     switch $arg
         case '--electrobun=*'
             set electrobunVersionOverride (string replace '--electrobun=' '' -- $arg)
         case --deps-only
             set depsOnly 1
+        case '--target=*'
+            set buildTarget (string replace '--target=' '' -- $arg)
         case '*'
             echo "Error: Unknown argument: $arg"
-            echo "Usage: update.fish [--electrobun=VERSION] [--deps-only]"
+            echo "Usage: update.fish [--electrobun=VERSION] [--deps-only] [--target=PACKAGE]"
             exit 1
     end
 end
@@ -87,9 +88,6 @@ if test "$targetElectrobun" != "$currentElectrobun"
     echo "[electrobun] $currentElectrobun -> $targetElectrobun"
     echo "[electrobun] Prefetching cli + core tarballs in parallel..."
 
-    # Parallel prefetch via temp files: fish command substitution can't be
-    # backgrounded directly, so we redirect each job's stdout and read it
-    # back after `wait`. Halves wall clock vs. serial fetches.
     set -l cliTmp (mktemp)
     set -l coreTmp (mktemp)
     prefetchSriHash "https://github.com/blackboardsh/electrobun/releases/download/v$targetElectrobun/electrobun-cli-linux-x64.tar.gz" >$cliTmp &
@@ -127,15 +125,14 @@ jq -n \
         bunDepsHash: $bunDepsHash
     }' >$versionFile
 
-echo "[bun-deps] Running nix build to discover bunDepsHash..."
-set -l buildOutput (nix build --no-link "$flakeRoot#t3code-desktop" 2>&1)
+echo "[bun-deps] Running nix build ($buildTarget) to discover bunDepsHash..."
+set -l buildOutput (nix build --no-link "$flakeRoot#$buildTarget" 2>&1)
 
-# `string join \n --` preserves newlines (fish splits command substitution
-# into per-line list elements; `echo $var` would re-join with spaces and
-# defeat awk's per-line matching).
+# All apps share the same shell template, so the bunDepsHash from any
+# target is valid for all of them. Match any *-bun-deps-* derivation.
 set -l newBunDepsHash (string join \n -- $buildOutput | awk '
     /hash mismatch in fixed-output derivation/ {
-        if ($0 ~ /t3code-desktop-bun-deps-/) {
+        if ($0 ~ /-bun-deps-/) {
             tracking = 1
         } else {
             tracking = 0
@@ -177,16 +174,17 @@ jq -n \
 # ── Verify ───────────────────────────────────────────────────────────────────
 
 echo ""
-echo "Verifying build..."
-if nix build --no-link "$flakeRoot#t3code-desktop" >/dev/null 2>&1
+echo "Verifying build ($buildTarget)..."
+if nix build --no-link "$flakeRoot#$buildTarget" >/dev/null 2>&1
     echo "Build OK"
 else
-    echo "Warning: verification build failed. version.json was updated but t3code-desktop"
-    echo "no longer builds. Inspect with: nix build $flakeRoot#t3code-desktop"
+    echo "Warning: verification build failed. version.json was updated but"
+    echo "$buildTarget no longer builds. Inspect with:"
+    echo "  nix build $flakeRoot#$buildTarget"
     exit 1
 end
 
 echo ""
 echo "Commit with:"
-echo "  git add packages/t3code-desktop/version.json"
-echo "  git commit -m \"t3code-desktop: refresh deps\""
+echo "  git add lib/desktop/electrobun/version.json"
+echo "  git commit -m \"electrobun: refresh deps\""

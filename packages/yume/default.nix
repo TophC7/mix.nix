@@ -5,8 +5,9 @@
 #
 # Usage:
 #   pkgs.yume
+#   pkgs.yume.override { claude = my-claude-code; }
 #
-{ lib, pkgs, claude ? pkgs.claude-code or null, ... }:
+{ lib, pkgs, ... }:
 let
   inherit (pkgs)
     stdenv
@@ -35,70 +36,71 @@ let
     glib
     stdenv.cc.cc.lib # libstdc++ for yume-bin
   ];
+
+  mkYume =
+    { claude ? pkgs.claude-code or null }:
+    stdenv.mkDerivation {
+      pname = "yume";
+      inherit (versionInfo) version;
+
+      src = fetchurl {
+        inherit (versionInfo) url hash;
+      };
+
+      nativeBuildInputs = [
+        autoPatchelfHook
+        dpkg
+        wrapGAppsHook3
+      ];
+
+      buildInputs = runtimeLibs;
+
+      unpackPhase = ''
+        dpkg-deb -x $src .
+      '';
+
+      installPhase = ''
+        runHook preInstall
+
+        install -Dm755 usr/bin/yume $out/bin/yume
+
+        # Resources (server binary, plugins, scripts)
+        mkdir -p $out/lib/yume/resources
+        cp -r usr/lib/yume/resources/* $out/lib/yume/resources/
+
+        for size in 32x32 128x128 "256x256@2"; do
+          if [ -f "usr/share/icons/hicolor/$size/apps/yume.png" ]; then
+            install -Dm644 \
+              "usr/share/icons/hicolor/$size/apps/yume.png" \
+              "$out/share/icons/hicolor/$size/apps/yume.png"
+          fi
+        done
+
+        install -Dm644 usr/share/applications/yume.desktop $out/share/applications/yume.desktop
+        substituteInPlace $out/share/applications/yume.desktop \
+          --replace-fail 'Exec=yume' "Exec=$out/bin/yume" \
+          --replace-fail 'Categories=' 'Categories=Development;'
+
+        runHook postInstall
+      '';
+
+      # WebKitGTK dlopen's media/plugin libraries at runtime, not covered by autoPatchelfHook RPATH
+      preFixup = ''
+        gappsWrapperArgs+=(
+          --set WEBKIT_DISABLE_COMPOSITING_MODE 1
+          --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath runtimeLibs}"
+          ${lib.optionalString (claude != null) "--set CLAUDE_PATH ${lib.getExe claude}"}
+        )
+      '';
+
+      meta = {
+        description = "Native desktop UI for Claude Code";
+        homepage = "https://github.com/aofp/yume";
+        changelog = "https://github.com/aofp/yume/releases/tag/v${versionInfo.version}";
+        license = lib.licenses.unfree;
+        mainProgram = "yume";
+        platforms = [ "x86_64-linux" ];
+      };
+    };
 in
-stdenv.mkDerivation {
-  pname = "yume";
-  inherit (versionInfo) version;
-
-  src = fetchurl {
-    inherit (versionInfo) url hash;
-  };
-
-  nativeBuildInputs = [
-    autoPatchelfHook
-    dpkg
-    wrapGAppsHook3
-  ];
-
-  buildInputs = runtimeLibs;
-
-  unpackPhase = ''
-    dpkg-deb -x $src .
-  '';
-
-  installPhase = ''
-    runHook preInstall
-
-    # Binary
-    install -Dm755 usr/bin/yume $out/bin/yume
-
-    # Resources (server binary, plugins, scripts)
-    mkdir -p $out/lib/yume/resources
-    cp -r usr/lib/yume/resources/* $out/lib/yume/resources/
-
-    # Icons
-    for size in 32x32 128x128 "256x256@2"; do
-      if [ -f "usr/share/icons/hicolor/$size/apps/yume.png" ]; then
-        install -Dm644 \
-          "usr/share/icons/hicolor/$size/apps/yume.png" \
-          "$out/share/icons/hicolor/$size/apps/yume.png"
-      fi
-    done
-
-    # Desktop entry
-    install -Dm644 usr/share/applications/yume.desktop $out/share/applications/yume.desktop
-    substituteInPlace $out/share/applications/yume.desktop \
-      --replace-fail 'Exec=yume' "Exec=$out/bin/yume" \
-      --replace-fail 'Categories=' 'Categories=Development;'
-
-    runHook postInstall
-  '';
-
-  # WebKitGTK dlopen's media/plugin libraries at runtime, not covered by autoPatchelfHook RPATH
-  preFixup = ''
-    gappsWrapperArgs+=(
-      --set WEBKIT_DISABLE_COMPOSITING_MODE 1
-      --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath runtimeLibs}"
-      ${lib.optionalString (claude != null) "--set CLAUDE_PATH ${lib.getExe claude}"}
-    )
-  '';
-
-  meta = {
-    description = "Native desktop UI for Claude Code";
-    homepage = "https://github.com/aofp/yume";
-    changelog = "https://github.com/aofp/yume/releases/tag/v${versionInfo.version}";
-    license = lib.licenses.unfree;
-    mainProgram = "yume";
-    platforms = [ "x86_64-linux" ];
-  };
-}
+lib.makeOverridable mkYume { }
