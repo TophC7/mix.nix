@@ -1,8 +1,11 @@
 // T3 Code desktop shell
 //
-// Spawns the `t3` CLI as a child process, waits for its HTTP server to start
-// listening, then opens an Electrobun window pointed at it. Kills the child
-// on shutdown so closing the window cleanly tears everything down.
+// Spawns the `t3` CLI as a child process, waits for its HTTP server to
+// actually serve a response (not just accept TCP), then opens an Electrobun
+// window pointed at it. The HTTP probe is important: TCP accept happens as
+// soon as `net.listen()` runs, before route handlers are mounted, and
+// opening the webview during that window results in a blank white screen
+// that never recovers.
 //
 // Config via env vars:
 //   T3CODE_DESKTOP_BIN   - path to the `t3` executable (defaults to "t3")
@@ -46,51 +49,83 @@ const t3Proc = spawn({
 	stderr: "inherit",
 });
 
-// Poll the TCP port until it accepts connections. Electrobun's webview will
-// hit a "refused" error if we open the window before t3 is ready.
-async function waitForPort(
-	h: string,
-	p: number,
+// Probe the HTTP root. TCP accept readiness is NOT enough -- `net.listen()`
+// accepts connections before route handlers are mounted on some Node HTTP
+// servers, so if we open the webview during that window it sees a failed
+// response and stays white. An actual HTTP GET with a 2xx body is the
+// only reliable "ready" signal.
+//
+// We also require TWO consecutive successful probes before declaring
+// ready: this closes the race where the server transitions from "listen"
+// to "routes mounted" between our first probe and the webview's first
+// navigation.
+async function waitForHttp(
+	baseUrl: string,
 	timeoutMs: number,
 ): Promise<void> {
 	const deadline = Date.now() + timeoutMs;
+	let consecutiveOk = 0;
+	const required = 2;
+
 	while (Date.now() < deadline) {
 		try {
-			const sock = await Bun.connect({
-				hostname: h,
-				port: p,
-				socket: {
-					data() {},
-					open(s) {
-						s.end();
-					},
-					error() {},
-				},
+			const res = await fetch(baseUrl, {
+				signal: AbortSignal.timeout(2000),
+				redirect: "manual", // a redirect still counts as "server is up"
 			});
-			sock.end();
-			return;
+			// Drain the body so we know the server actually produced a response,
+			// not just headers and an immediate close.
+			await res.arrayBuffer();
+
+			// Treat any <500 status as "server is alive and routing"; t3's
+			// root may 302 to a login or 200 the SPA shell, both fine.
+			if (res.status < 500) {
+				consecutiveOk += 1;
+				if (consecutiveOk >= required) return;
+				await Bun.sleep(100);
+				continue;
+			}
+			consecutiveOk = 0;
 		} catch (err) {
-			// ECONNREFUSED is the expected "still starting up" state. Anything
-			// else (DNS failure, invalid address, programming bug) should
-			// propagate immediately instead of polling for 15 seconds.
+			// Connection refused, reset, timeouts, DNS-in-progress: expected
+			// while the server is still booting. Bun's fetch uses symbolic
+			// error codes without the glibc `E` prefix ("ConnectionRefused",
+			// not "ECONNREFUSED"), and some implementations throw a plain
+			// TypeError for "fetch failed". Accept both.
+			const name = (err as Error)?.name;
 			const code = (err as NodeJS.ErrnoException)?.code;
-			if (code && code !== "ECONNREFUSED") throw err;
-			await Bun.sleep(100);
+			const retriable =
+				code === "ConnectionRefused" ||
+				code === "ConnectionReset" ||
+				code === "ConnectionClosed" ||
+				code === "CanceledRequest" ||
+				code === "ECONNREFUSED" ||
+				code === "ECONNRESET" ||
+				code === "ENOTFOUND" ||
+				code === "ETIMEDOUT" ||
+				name === "TimeoutError" ||
+				name === "AbortError" ||
+				name === "TypeError"; // bare "fetch failed"
+			if (!retriable) throw err;
+			consecutiveOk = 0;
 		}
+		await Bun.sleep(100);
 	}
 	throw new Error(
-		`t3 did not start listening on ${h}:${p} within ${timeoutMs}ms`,
+		`t3 did not become ready at ${baseUrl} within ${timeoutMs}ms`,
 	);
 }
 
-// Race the port-readiness probe against the subprocess's own exit promise.
+const baseUrl = `http://${host}:${port}`;
+
+// Race the HTTP-readiness probe against the subprocess's own exit promise.
 // If t3 crashes at startup (bad flag, port in use, internal error) we'd
 // otherwise poll for 15 seconds and then open a window at a dead server.
 // Whichever promise resolves first tells us what happened.
 type ReadyResult = { kind: "ready" } | { kind: "exited"; code: number | null };
 try {
 	const result: ReadyResult = await Promise.race([
-		waitForPort(host, port, 15000).then(() => ({ kind: "ready" as const })),
+		waitForHttp(baseUrl, 15000).then(() => ({ kind: "ready" as const })),
 		t3Proc.exited.then((code) => ({ kind: "exited" as const, code })),
 	]);
 	if (result.kind === "exited") {
@@ -132,7 +167,7 @@ process.on("SIGHUP", () => {
 
 new BrowserWindow({
 	title: "T3 Code",
-	url: `http://${host}:${port}`,
+	url: baseUrl,
 	frame: {
 		x: 100,
 		y: 100,
@@ -141,4 +176,4 @@ new BrowserWindow({
 	},
 });
 
-console.log(`[t3code-desktop] opened window at http://${host}:${port}`);
+console.log(`[t3code-desktop] opened window at ${baseUrl}`);
