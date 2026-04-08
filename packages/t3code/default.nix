@@ -15,8 +15,8 @@
 #
 # Files:
 #   default.nix   - this derivation
-#   version.json  - rev, srcHash, depsHash (updated by update.fish)
-#   update.fish   - fetches latest main, rehashes src and deps
+#   version.json  - rev, srcHash, depsHash, runtimeDepsHash (updated by update.fish)
+#   update.fish   - fetches latest main, rehashes src + both dep trees
 {
   lib,
   pkgs,
@@ -53,12 +53,13 @@ let
       version = versionInfo.version;
       inherit src;
 
+      # Only bun + cacert are needed for the FoD -- we pass --ignore-scripts
+      # so no postinstall scripts run, meaning node-gyp/python/pkg-config are
+      # never invoked inside the FoD. The main derivation does the rebuild
+      # work separately with its own toolchain in scope.
       nativeBuildInputs = [
         pkgs.bun
         pkgs.cacert
-        pkgs.nodejs_24
-        pkgs.python3
-        pkgs.pkg-config
       ];
 
       dontConfigure = true;
@@ -113,7 +114,7 @@ let
     }).overrideAttrs
       { outputHash = versionInfo.runtimeDepsHash; };
 in
-stdenv.mkDerivation (finalAttrs: {
+stdenv.mkDerivation {
   pname = "t3code";
   version = versionInfo.version;
 
@@ -189,6 +190,14 @@ stdenv.mkDerivation (finalAttrs: {
     # the main build phase (buildDeps tree). Copying just the `build/`
     # subdirectory is enough because node-pty's loader resolves it
     # relative to its own package dir. Avoids re-running node-gyp here.
+    #
+    # Fail loudly if the native binding is missing -- if this file isn't
+    # present the runtime package is silently broken and t3 crashes on
+    # first terminal spawn.
+    if [ ! -f node_modules/node-pty/build/Release/pty.node ]; then
+      echo "error: node-pty native binding missing; the build-time rebuild in postPatch failed silently" >&2
+      exit 1
+    fi
     cp -a node_modules/node-pty/build \
       "$out/share/t3code/node_modules/node-pty/build"
 
@@ -210,4 +219,4 @@ stdenv.mkDerivation (finalAttrs: {
     license = lib.licenses.mit;
     mainProgram = "t3";
   };
-})
+}

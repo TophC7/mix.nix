@@ -81,7 +81,12 @@ set -l buildOutput (nix build --keep-going --no-link "$flakeRoot#t3code" 2>&1)
 # name the drv; the following "got:" line has the real hash. Tag each
 # captured hash with "build" or "runtime" based on whether the drv name
 # contains "-bun-deps-runtime-" or just "-bun-deps-".
-set -l parsed (echo $buildOutput | awk '
+#
+# `string join \n` preserves newlines between list elements -- fish split
+# the nix output into per-line list elements during capture, and piping
+# via `echo` would re-join them with spaces and defeat awk's per-line
+# regex matching.
+set -l parsed (string join \n -- $buildOutput | awk '
     /hash mismatch in fixed-output derivation/ {
         if ($0 ~ /t3code-bun-deps-runtime-/) {
             current = "runtime"

@@ -1,11 +1,16 @@
 # t3code-desktop - Electrobun native-window wrapper around the t3code CLI
 #
-# Runs the `t3` server as a child process of a small Bun shell app, then opens
-# an Electrobun window (system webview, not CEF) pointed at the local server.
-# Closing the window terminates the child t3 process via Bun's process hooks.
+# Runs the `t3` server as a child process of a small Bun shell app, then
+# opens an Electrobun window (system webview, not CEF) pointed at the local
+# server. Child-process cleanup happens at the kernel level via a tiny
+# prctl(PR_SET_PDEATHSIG) wrapper around t3 -- Electrobun's GTK FFI loop
+# blocks JS signal delivery, so bun-side `process.on("SIGTERM", ...)`
+# handlers can't be relied on for tearing down the child.
 #
 # Layout:
 #   default.nix            - this derivation
+#   version.json           - electrobun version + all mutable hashes
+#   update.fish            - refreshes version.json
 #   shell/                 - source of our Electrobun shell app
 #     package.json         - declares `electrobun` as a dep (+ bun types)
 #     bun.lock             - pinned by bun; used for the deterministic FoD
@@ -20,30 +25,29 @@
 let
   inherit (pkgs) stdenv stdenvNoCC fetchurl;
 
+  versionInfo = lib.importJSON ./version.json;
+
   # Sibling package. Importing directly (rather than going through a
   # per-package callPackage scope) keeps the auto-discovery pattern simple.
   t3code = import ../t3code { inherit lib pkgs; };
 
-  electrobunVersion = "1.16.0";
-
   # Prebuilt Electrobun binaries from upstream GH releases. Fetching these
-  # separately (rather than letting electrobun's own wrapper download them at
-  # runtime) keeps the main build hermetic.
+  # separately (rather than letting electrobun's own wrapper download them
+  # at runtime) keeps the main build hermetic.
   electrobunCli = fetchurl {
-    url = "https://github.com/blackboardsh/electrobun/releases/download/v${electrobunVersion}/electrobun-cli-linux-x64.tar.gz";
-    hash = "sha256-lBKJBx4oSEl/mo67cKrlbuwd07dQYJrgxjQxZzZe5m0=";
+    url = "https://github.com/blackboardsh/electrobun/releases/download/v${versionInfo.electrobun.version}/electrobun-cli-linux-x64.tar.gz";
+    hash = versionInfo.electrobun.cliHash;
   };
   electrobunCore = fetchurl {
-    url = "https://github.com/blackboardsh/electrobun/releases/download/v${electrobunVersion}/electrobun-core-linux-x64.tar.gz";
-    hash = "sha256-p0aLbSaT4OV2jajdU+ecSC1D0rU5dykqbU1RwBIpYIQ=";
+    url = "https://github.com/blackboardsh/electrobun/releases/download/v${versionInfo.electrobun.version}/electrobun-core-linux-x64.tar.gz";
+    hash = versionInfo.electrobun.coreHash;
   };
 
-  # Upstream icon, pinned by commit so the hash is stable even after main
-  # moves. 1024x1024 PNG -- the XDG hicolor theme picks the right size at
-  # display time, and most icon renderers downscale cleanly.
+  # Upstream icon, pinned by commit so the hash is stable. update.fish
+  # keeps this in sync with t3code's rev so the icon follows the package.
   icon = fetchurl {
-    url = "https://raw.githubusercontent.com/pingdotgg/t3code/28e481eb24dc7e790b6d1ea963f20024b6a2bbc4/assets/prod/black-universal-1024.png";
-    hash = "sha256-E7Nd8I7BQ/s54LVjWQRTnvohyHPE6cKwxE1ciSPzeAM=";
+    url = "https://raw.githubusercontent.com/pingdotgg/t3code/${versionInfo.icon.rev}/assets/prod/black-universal-1024.png";
+    hash = versionInfo.icon.hash;
   };
 
   # Tiny C shim: call prctl(PR_SET_PDEATHSIG, SIGTERM) then execvp the
@@ -74,10 +78,10 @@ let
     }
   '';
 
-  # The XDG desktop entry. `StartupWMClass` must match what Electrobun sets
-  # as its window class so task-bar grouping works; it uses the app.name
-  # from electrobun.config.ts ("t3code-desktop-dev" on dev builds -- match
-  # to whatever electrobun build emits).
+  # XDG desktop entry. StartupWMClass must match what Electrobun sets as
+  # the window class so desktop environments group taskbar entries and pin
+  # launches correctly. Stable builds use the bare app.name from the
+  # electrobun config (no `-dev` or `-canary` suffix), so this matches.
   desktopItem = pkgs.makeDesktopItem {
     name = "t3code-desktop";
     desktopName = "T3 Code";
@@ -85,6 +89,7 @@ let
     comment = "Minimal web GUI for coding agents (Codex, Claude Code)";
     exec = "t3code-desktop";
     icon = "t3code-desktop";
+    startupWMClass = "t3code-desktop";
     categories = [
       "Development"
       "Utility"
@@ -122,7 +127,10 @@ let
     version = "0.0.1";
     src = shellSrc;
 
-    nativeBuildInputs = [ pkgs.bun ];
+    nativeBuildInputs = [
+      pkgs.bun
+      pkgs.cacert
+    ];
 
     dontConfigure = true;
     dontBuild = true;
@@ -144,20 +152,19 @@ let
 
     outputHashMode = "recursive";
     outputHashAlgo = "sha256";
-    outputHash = "sha256-SPXONtPW+uoLh3zBkfzPjmsCfMP+Ika+VOyfwIvMYZ4=";
+    outputHash = versionInfo.bunDepsHash;
   };
 in
-stdenv.mkDerivation (finalAttrs: {
+stdenv.mkDerivation {
   pname = "t3code-desktop";
   version = "0.0.1";
 
   src = shellSrc;
 
-  __structuredAttrs = true;
-
   nativeBuildInputs = [
     pkgs.bun
     pkgs.nodejs_24
+    pkgs.zstd # for extracting the stable-build .tar.zst artifact
     pkgs.makeBinaryWrapper
     pkgs.autoPatchelfHook
   ];
@@ -176,18 +183,15 @@ stdenv.mkDerivation (finalAttrs: {
     chmod -R u+w ./node_modules
 
     # Place the compiled CLI under node_modules/electrobun/bin/ where the
-    # cjs wrapper expects it (so it skips its GitHub download path).
+    # cjs wrapper expects it (so it skips its GitHub download path). tar
+    # preserves the executable bit, no chmod needed.
     mkdir -p node_modules/electrobun/bin
     tar -xzf ${electrobunCli} -C node_modules/electrobun/bin
-    chmod +x node_modules/electrobun/bin/electrobun
 
     # Place the platform runtime (bun, launcher, libNativeWrapper.so, api/,
     # etc.) under dist-linux-x64/ where the CLI expects it.
     mkdir -p node_modules/electrobun/dist-linux-x64
     tar -xzf ${electrobunCore} -C node_modules/electrobun/dist-linux-x64
-    chmod -R u+w node_modules/electrobun/dist-linux-x64
-    # The launcher and helpers need the exec bit
-    chmod +x node_modules/electrobun/dist-linux-x64/{bun,launcher,bsdiff,bspatch,extractor,process_helper,zig-asar,zig-zstd} 2>/dev/null || true
 
     patchShebangs node_modules
 
@@ -205,9 +209,13 @@ stdenv.mkDerivation (finalAttrs: {
 
     export HOME=$(mktemp -d)
 
-    # Invoke the CLI binary directly -- skipping the cjs wrapper -- to avoid
-    # any filesystem prodding it does for its "cache" path.
-    ./node_modules/electrobun/bin/electrobun build
+    # --env=stable produces:
+    #   build/stable-linux-x64/t3code-desktop/    (self-extracting installer variant - unusable in Nix store)
+    #   artifacts/stable-linux-x64-t3code-desktop.tar.zst  (normal runnable app - what we ship)
+    #
+    # The --env flag requires --env=VALUE form; --env VALUE is silently
+    # ignored and falls back to "dev".
+    ./node_modules/electrobun/bin/electrobun build --env=stable
 
     runHook postBuild
   '';
@@ -215,15 +223,18 @@ stdenv.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
-    mkdir -p "$out/share/t3code-desktop"
-    cp -a build/dev-linux-x64/t3code-desktop-dev "$out/share/t3code-desktop/app"
+    # The stable .tar.zst payload contains a normal statically-linked Zig
+    # launcher + Resources/main.js + bun/libs -- same shape as a dev build
+    # but without the "-dev" channel suffix. The top-level directory inside
+    # the archive is `t3code-desktop/`; --strip-components=1 drops that and
+    # lands its contents directly in $out/share/t3code-desktop/app/.
+    mkdir -p "$out/share/t3code-desktop/app"
+    tar --zstd -xf artifacts/stable-linux-x64-t3code-desktop.tar.zst \
+      -C "$out/share/t3code-desktop/app" --strip-components=1
 
-    # Re-patch the ELF bits we just copied in. The postPatch autoPatchelf run
-    # set RPATHs that reference /build/shell/node_modules/..., which (a)
-    # won't exist at runtime and (b) trips the fixup-phase check for
-    # forbidden /build/ references. Running it again against $out rewrites
-    # RPATHs to point at the store paths of the buildInputs we already
-    # declared.
+    # Re-patch the ELF bits we just extracted. The bun binary and
+    # libNativeWrapper.so inside the tarball still have Ubuntu-style
+    # DT_NEEDED entries that need rewriting to point at NixOS store paths.
     autoPatchelf "$out/share/t3code-desktop/app/bin"
 
     # XDG icon: installing the 1024x1024 PNG under hicolor/1024x1024/apps/
@@ -251,8 +262,9 @@ stdenv.mkDerivation (finalAttrs: {
   meta = {
     description = "Electrobun native-window wrapper around t3code";
     homepage = "https://github.com/pingdotgg/t3code";
+    changelog = "https://github.com/pingdotgg/t3code/commits/main";
     platforms = [ "x86_64-linux" ];
     license = lib.licenses.mit;
     mainProgram = "t3code-desktop";
   };
-})
+}

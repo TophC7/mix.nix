@@ -13,8 +13,19 @@ import { spawn } from "bun";
 import { BrowserWindow } from "electrobun/bun";
 
 const t3Bin = process.env["T3CODE_DESKTOP_BIN"] ?? "t3";
-const port = Number(process.env["T3CODE_DESKTOP_PORT"] ?? "18822");
 const host = process.env["T3CODE_DESKTOP_HOST"] ?? "127.0.0.1";
+
+// Parse and validate the port env var. Number("not-a-number") gives NaN,
+// Number("99999") gives an out-of-range value; both are rejected up front
+// with a clear error instead of producing malformed URLs downstream.
+const portRaw = process.env["T3CODE_DESKTOP_PORT"] ?? "18822";
+const port = Number(portRaw);
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+	console.error(
+		`[t3code-desktop] T3CODE_DESKTOP_PORT must be an integer in [1,65535], got: ${portRaw}`,
+	);
+	process.exit(2);
+}
 
 // Optional parent-death exec shim provided by the Nix derivation (a tiny C
 // binary that calls prctl(PR_SET_PDEATHSIG, SIGTERM) before execvp'ing its
@@ -58,7 +69,12 @@ async function waitForPort(
 			});
 			sock.end();
 			return;
-		} catch {
+		} catch (err) {
+			// ECONNREFUSED is the expected "still starting up" state. Anything
+			// else (DNS failure, invalid address, programming bug) should
+			// propagate immediately instead of polling for 15 seconds.
+			const code = (err as NodeJS.ErrnoException)?.code;
+			if (code && code !== "ECONNREFUSED") throw err;
 			await Bun.sleep(100);
 		}
 	}
@@ -67,8 +83,22 @@ async function waitForPort(
 	);
 }
 
+// Race the port-readiness probe against the subprocess's own exit promise.
+// If t3 crashes at startup (bad flag, port in use, internal error) we'd
+// otherwise poll for 15 seconds and then open a window at a dead server.
+// Whichever promise resolves first tells us what happened.
+type ReadyResult = { kind: "ready" } | { kind: "exited"; code: number | null };
 try {
-	await waitForPort(host, port, 15000);
+	const result: ReadyResult = await Promise.race([
+		waitForPort(host, port, 15000).then(() => ({ kind: "ready" as const })),
+		t3Proc.exited.then((code) => ({ kind: "exited" as const, code })),
+	]);
+	if (result.kind === "exited") {
+		console.error(
+			`[t3code-desktop] t3 exited before becoming ready (code ${result.code})`,
+		);
+		process.exit(1);
+	}
 } catch (err) {
 	console.error("[t3code-desktop]", err);
 	t3Proc.kill();

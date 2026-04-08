@@ -6,7 +6,7 @@ import type { ElectrobunConfig } from "electrobun";
 export default {
   app: {
     name: "t3code-desktop",
-    identifier: "sh.blackboard.t3code-desktop",
+    identifier: "foo.ryot.t3code-desktop",
     version: "0.0.1",
   },
   build: {
