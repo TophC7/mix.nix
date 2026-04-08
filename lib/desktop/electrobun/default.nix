@@ -236,6 +236,7 @@ in
         webkitgtk_4_1
         gtk3
         glib
+        glib-networking # GnuTLS backend for GIO — without this, webkit2gtk cannot load HTTPS URLs
         libsoup_3
         cairo
         pango
