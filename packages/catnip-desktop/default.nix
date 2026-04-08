@@ -1,6 +1,6 @@
-# catnip-desktop — Electrobun native-window wrapper for W&B Catnip.
+# catnip-desktop — Wails native-window wrapper for W&B Catnip.
 #
-# Built with lib.desktop.mkElectrobunApp (command mode). Spawns `catnip serve`
+# Built with lib.desktop.mkWailsApp (command mode). Spawns `catnip serve`
 # from the current working directory, waits for HTTP readiness, then opens a
 # system-webview window.
 #
@@ -11,14 +11,14 @@
   lib,
   pkgs,
   catnip ? import ../catnip { inherit lib pkgs; },
+  monocraft-nerd-fonts ? import ../monocraft-nerd-fonts { inherit lib pkgs; },
   ...
 }:
-lib.desktop.mkElectrobunApp pkgs {
+lib.desktop.mkWailsApp pkgs {
   pname = "catnip-desktop";
   desktopName = "Catnip";
   genericName = "Coding Agent Manager";
   comment = "W&B Catnip – containerized coding agent sessions";
-  identifier = "foo.ryot.catnip-desktop";
   categories = [
     "Development"
     "Utility"
@@ -41,8 +41,13 @@ lib.desktop.mkElectrobunApp pkgs {
     defaultPort = 6369;
   };
 
+  monoFont = {
+    package = monocraft-nerd-fonts;
+    name = "Monocraft Nerd Font";
+  };
+
   meta = {
-    description = "Electrobun native-window wrapper for W&B Catnip";
+    description = "Wails native-window wrapper for W&B Catnip";
     homepage = "https://github.com/wandb/catnip";
     license = lib.licenses.asl20;
   };

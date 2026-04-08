@@ -1072,7 +1072,7 @@ Custom packages built by mix.nix.
 | `proton-cachyos`       | CachyOS Proton build (x86-64-v3)                      |
 | `proton-cachyos.v4`    | CachyOS Proton build (x86-64-v4, AVX-512)             |
 | `t3code`               | Web GUI for Claude Code agents and other AI providers |
-| `t3code-desktop`       | Native desktop wrapper for t3code (uses mkElectrobunApp) |
+| `t3code-desktop`       | Native desktop wrapper for t3code (uses mkWailsApp) |
 | `WiiUDownloader`       | GUI to download Wii U content from Nintendo servers   |
 
 ```bash
@@ -1203,37 +1203,39 @@ For full container stack orchestration (networks, targets, dependencies), use th
 
 #### Builders
 
-- `mkElectrobunApp pkgs {...}` - Create native desktop apps using Electrobun (system webview, no CEF)
+- `mkWailsApp pkgs {...}` - Create native desktop apps using Wails v2 (webkit2gtk, native Wayland)
   - Supports two modes: `url` (connect to external service) or `command` (spawn + wrap CLI)
-  - Produces self-contained app bundle with binary wrapper, hicolor icons, and .desktop entry
+  - Produces a native Go binary with hicolor icons and .desktop entry
   - **URL Mode Example** (connect to self-hosted service):
     ```nix
-    lib.desktop.mkElectrobunApp pkgs {
+    lib.desktop.mkWailsApp pkgs {
       pname = "myapp-desktop";
       desktopName = "My App";
-      identifier = "com.example.myapp-desktop";
+      programName = "myapp-desktop";
       icon = ./icon.png;
       url.default = "http://localhost:6369";
-      url.envVar = "MYAPP_URL";  # Optional: use env var to override
     }
     ```
   - **Command Mode Example** (CLI wrapper with auto-port):
     ```nix
-    lib.desktop.mkElectrobunApp pkgs {
+    lib.desktop.mkWailsApp pkgs {
       pname = "t3code-desktop";
       desktopName = "T3 Code";
-      identifier = "foo.ryot.t3code-desktop";
+      programName = "t3code-desktop";
       icon = "${t3code.src}/assets/icon.png";
       command = {
         package = t3code;
         binName = "t3";
         args = [ "--no-browser" "--port" "{port}" "--host" "{host}" ];
         defaultPort = 18822;
-        defaultHost = "127.0.0.1";
+      };
+      monoFont = {                        # Optional: override monospace font
+        package = monocraft-nerd-fonts;
+        name = "Monocraft Nerd Font";
       };
     }
     ```
-  - Common parameters: `pname`, `desktopName`, `identifier`, `icon`, `window` (width/height), `title`, `version`, `categories`
+  - Common parameters: `pname`, `desktopName`, `programName`, `icon`, `window` (width/height), `title`, `version`, `categories`, `monoFont`
 
 - `mkWineApp pkgs {...}` - Create Wine application wrapper with isolated prefix
 
