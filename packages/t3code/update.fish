@@ -3,17 +3,21 @@
 # Update script for t3code
 #
 # Fetches the latest commit from pingdotgg/t3code main, re-hashes the source
-# and the bun deps FoD, and writes the new values to version.json.
+# and BOTH bun dep FoDs (buildtime + runtime), and writes the new values to
+# version.json.
 #
-# The deps hash discovery works by setting depsHash to a sentinel value,
-# invoking nix build, and parsing the "got:" line from the resulting
-# hash mismatch error.
+# Hash discovery: we sentinel both depsHash and runtimeDepsHash, then run
+# `nix build --keep-going`. Because the two FoDs are independent derivations,
+# nix attempts them concurrently and both fail with "hash mismatch" errors.
+# A tiny awk filter walks the error stream, tracks which derivation each
+# error block belongs to by scanning for its drv name, and emits the real
+# "got:" hashes keyed by purpose (build/runtime).
 
 set -l scriptDir (dirname (status filename))
 set -l versionFile "$scriptDir/version.json"
 
 # Check dependencies
-for cmd in curl jq nix-prefetch-git nix
+for cmd in curl jq nix-prefetch-git nix awk
     if not command -q $cmd
         echo "Error: Required command '$cmd' not found"
         exit 1
@@ -54,9 +58,8 @@ if test "$currentRev" = "$latestRev"
     exit 0
 end
 
-# ── Discover new depsHash ────────────────────────────────────────────────────
+# ── Sentinel write + dual-hash discovery ─────────────────────────────────────
 
-# Format version string up front so the sentinel write mirrors the final file.
 set -l latestVersion "unstable-$latestDate-$shortRev"
 set -l fakeHash "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
@@ -66,18 +69,53 @@ jq -n \
     --arg rev "$latestRev" \
     --arg hash "$latestHash" \
     --arg depsHash "$fakeHash" \
-    '{version: $version, rev: $rev, hash: $hash, depsHash: $depsHash}' >$versionFile
+    --arg runtimeDepsHash "$fakeHash" \
+    '{version: $version, rev: $rev, hash: $hash, depsHash: $depsHash, runtimeDepsHash: $runtimeDepsHash}' >$versionFile
 
-# Find the repo root so `nix build .#t3code` targets the right flake even
-# when the script is run from a different cwd.
 set -l flakeRoot (git -C $scriptDir rev-parse --show-toplevel)
 
-echo "Running nix build to discover depsHash (expected to fail on hash mismatch)..."
-set -l buildOutput (nix build --no-link "$flakeRoot#t3code" 2>&1)
-set -l newDepsHash (echo $buildOutput | string match -r 'got:\s+(sha256-[A-Za-z0-9+/=]+)' | tail -n +2)
+echo "Running nix build --keep-going to discover both FoD hashes..."
+set -l buildOutput (nix build --keep-going --no-link "$flakeRoot#t3code" 2>&1)
 
-if test -z "$newDepsHash"
-    echo "Error: Could not extract depsHash from build output. Full output:"
+# Walk the error stream. "hash mismatch in fixed-output derivation" lines
+# name the drv; the following "got:" line has the real hash. Tag each
+# captured hash with "build" or "runtime" based on whether the drv name
+# contains "-bun-deps-runtime-" or just "-bun-deps-".
+set -l parsed (echo $buildOutput | awk '
+    /hash mismatch in fixed-output derivation/ {
+        if ($0 ~ /t3code-bun-deps-runtime-/) {
+            current = "runtime"
+        } else if ($0 ~ /t3code-bun-deps-/) {
+            current = "build"
+        } else {
+            current = ""
+        }
+        next
+    }
+    /got:[ \t]+sha256-/ && current != "" {
+        match($0, /sha256-[A-Za-z0-9+\/=]+/)
+        print current "=" substr($0, RSTART, RLENGTH)
+        current = ""
+    }
+')
+
+set -l newDepsHash ""
+set -l newRuntimeDepsHash ""
+for line in $parsed
+    switch $line
+        case 'build=*'
+            set newDepsHash (string replace 'build=' '' -- $line)
+        case 'runtime=*'
+            set newRuntimeDepsHash (string replace 'runtime=' '' -- $line)
+    end
+end
+
+if test -z "$newDepsHash" -o -z "$newRuntimeDepsHash"
+    echo "Error: Could not extract both hashes from build output."
+    echo "  depsHash:        $newDepsHash"
+    echo "  runtimeDepsHash: $newRuntimeDepsHash"
+    echo ""
+    echo "Full output:"
     echo $buildOutput
     echo ""
     echo "Reverting version.json"
@@ -85,7 +123,8 @@ if test -z "$newDepsHash"
     exit 1
 end
 
-echo "New depsHash: $newDepsHash"
+echo "New depsHash:        $newDepsHash"
+echo "New runtimeDepsHash: $newRuntimeDepsHash"
 
 # ── Write final version.json ─────────────────────────────────────────────────
 
@@ -94,7 +133,8 @@ jq -n \
     --arg rev "$latestRev" \
     --arg hash "$latestHash" \
     --arg depsHash "$newDepsHash" \
-    '{version: $version, rev: $rev, hash: $hash, depsHash: $depsHash}' >$versionFile
+    --arg runtimeDepsHash "$newRuntimeDepsHash" \
+    '{version: $version, rev: $rev, hash: $hash, depsHash: $depsHash, runtimeDepsHash: $runtimeDepsHash}' >$versionFile
 
 echo ""
 echo "Updated: $currentRev -> $latestRev"

@@ -16,10 +16,21 @@ const t3Bin = process.env["T3CODE_DESKTOP_BIN"] ?? "t3";
 const port = Number(process.env["T3CODE_DESKTOP_PORT"] ?? "18822");
 const host = process.env["T3CODE_DESKTOP_HOST"] ?? "127.0.0.1";
 
+// Optional parent-death exec shim provided by the Nix derivation (a tiny C
+// binary that calls prctl(PR_SET_PDEATHSIG, SIGTERM) before execvp'ing its
+// target). Wrapping t3 in this shim ensures the kernel kills it the
+// instant we (its direct parent) die -- even if Electrobun's GTK FFI loop
+// has blocked signal delivery in our own JS event loop, which prevents
+// process.on("SIGTERM", ...) from firing reliably.
+const pdeathExec = process.env["T3CODE_DESKTOP_PDEATH_EXEC"];
+
 // Start the server. --no-browser keeps it from opening the user's default
 // browser -- we'll show the UI in our own window instead.
+const t3Cmd = ["--no-browser", "--port", String(port), "--host", host];
 const t3Proc = spawn({
-	cmd: [t3Bin, "--no-browser", "--port", String(port), "--host", host],
+	cmd: pdeathExec
+		? [pdeathExec, t3Bin, ...t3Cmd]
+		: [t3Bin, ...t3Cmd],
 	stdout: "inherit",
 	stderr: "inherit",
 });
@@ -64,8 +75,12 @@ try {
 	process.exit(1);
 }
 
-// Tear down the child on any termination path. Without these handlers the
-// `t3` server would outlive the window.
+// Clean-shutdown path (window close / Electrobun quit()): fire an explicit
+// kill on the child so we don't leak it while the process is still
+// responsive. When control never returns to JS (launcher killed externally,
+// Electrobun FFI loop blocking), none of these handlers fire -- the
+// pdeath-exec wrapper handles that case at the kernel level by killing the
+// t3 child as soon as bun exits.
 const cleanup = () => {
 	try {
 		t3Proc.kill();
@@ -79,6 +94,10 @@ process.on("SIGINT", () => {
 process.on("SIGTERM", () => {
 	cleanup();
 	process.exit(143);
+});
+process.on("SIGHUP", () => {
+	cleanup();
+	process.exit(129);
 });
 
 new BrowserWindow({

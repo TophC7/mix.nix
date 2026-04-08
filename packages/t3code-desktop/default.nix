@@ -46,6 +46,34 @@ let
     hash = "sha256-E7Nd8I7BQ/s54LVjWQRTnvohyHPE6cKwxE1ciSPzeAM=";
   };
 
+  # Tiny C shim: call prctl(PR_SET_PDEATHSIG, SIGTERM) then execvp the
+  # target. Used to wrap the t3 child process so the kernel tears it down
+  # the instant its direct parent (our bun shell) dies -- working around
+  # the fact that Electrobun's GTK FFI loop blocks JS signal delivery, so
+  # bun-side `process.on("SIGTERM", ...)` handlers never run when the
+  # Electrobun launcher forwards signals.
+  pdeathExec = pkgs.writeCBin "pdeath-exec" ''
+    #define _GNU_SOURCE
+    #include <sys/prctl.h>
+    #include <signal.h>
+    #include <unistd.h>
+    #include <stdio.h>
+
+    int main(int argc, char *argv[]) {
+        if (argc < 2) {
+            fprintf(stderr, "usage: pdeath-exec <cmd> [args...]\n");
+            return 1;
+        }
+        if (prctl(PR_SET_PDEATHSIG, SIGTERM, 0, 0, 0) == -1) {
+            perror("prctl(PR_SET_PDEATHSIG)");
+            return 1;
+        }
+        execvp(argv[1], argv + 1);
+        perror("execvp");
+        return 127;
+    }
+  '';
+
   # The XDG desktop entry. `StartupWMClass` must match what Electrobun sets
   # as its window class so task-bar grouping works; it uses the app.name
   # from electrobun.config.ts ("t3code-desktop-dev" on dev builds -- match
@@ -211,8 +239,11 @@ stdenv.mkDerivation (finalAttrs: {
     # Launcher: set T3CODE_DESKTOP_BIN to our already-packaged t3 so the
     # shell app's spawn() finds it without PATH setup, then exec the
     # Electrobun launcher binary which runs our bundled Bun entry.
+    # T3CODE_DESKTOP_PDEATH_EXEC points at our prctl wrapper so the shell
+    # app can opt into kernel-driven child cleanup.
     makeBinaryWrapper "$out/share/t3code-desktop/app/bin/launcher" "$out/bin/t3code-desktop" \
-      --set-default T3CODE_DESKTOP_BIN "${t3code}/bin/t3"
+      --set-default T3CODE_DESKTOP_BIN "${t3code}/bin/t3" \
+      --set-default T3CODE_DESKTOP_PDEATH_EXEC "${pdeathExec}/bin/pdeath-exec"
 
     runHook postInstall
   '';
