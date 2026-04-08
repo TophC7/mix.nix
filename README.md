@@ -1064,12 +1064,15 @@ Custom packages built by mix.nix.
 | `eightbitdo-updater`   | 8BitDo controller firmware updater                    |
 | `gamescope-git`        | Gamescope compositor (git version)                    |
 | `gamescope-git.wsi`    | Gamescope WSI layer only (git version)                |
+| `helium`               | Chromium-based private web browser                    |
 | `journey`              | Cross-platform journal app                            |
 | `monocraft-nerd-fonts` | Minecraft-style monospace font with Nerd Font icons   |
 | `olm-toggle`           | GNOME Shell extension to toggle OLM tunneling service |
 | `procon2-init`         | Nintendo Switch 2 Pro Controller USB initializer      |
 | `proton-cachyos`       | CachyOS Proton build (x86-64-v3)                      |
 | `proton-cachyos.v4`    | CachyOS Proton build (x86-64-v4, AVX-512)             |
+| `t3code`               | Web GUI for Claude Code agents and other AI providers |
+| `t3code-desktop`       | Native desktop wrapper for t3code (uses mkElectrobunApp) |
 | `WiiUDownloader`       | GUI to download Wii U content from Nintendo servers   |
 
 ```bash
@@ -1198,10 +1201,50 @@ For full container stack orchestration (networks, targets, dependencies), use th
 
 ### lib.desktop - Desktop Utilities
 
+#### Builders
+
+- `mkElectrobunApp pkgs {...}` - Create native desktop apps using Electrobun (system webview, no CEF)
+  - Supports two modes: `url` (connect to external service) or `command` (spawn + wrap CLI)
+  - Produces self-contained app bundle with binary wrapper, hicolor icons, and .desktop entry
+  - **URL Mode Example** (connect to self-hosted service):
+    ```nix
+    lib.desktop.mkElectrobunApp pkgs {
+      pname = "myapp-desktop";
+      desktopName = "My App";
+      identifier = "com.example.myapp-desktop";
+      icon = ./icon.png;
+      url.default = "http://localhost:6369";
+      url.envVar = "MYAPP_URL";  # Optional: use env var to override
+    }
+    ```
+  - **Command Mode Example** (CLI wrapper with auto-port):
+    ```nix
+    lib.desktop.mkElectrobunApp pkgs {
+      pname = "t3code-desktop";
+      desktopName = "T3 Code";
+      identifier = "foo.ryot.t3code-desktop";
+      icon = "${t3code.src}/assets/icon.png";
+      command = {
+        package = t3code;
+        binName = "t3";
+        args = [ "--no-browser" "--port" "{port}" "--host" "{host}" ];
+        defaultPort = 18822;
+        defaultHost = "127.0.0.1";
+      };
+    }
+    ```
+  - Common parameters: `pname`, `desktopName`, `identifier`, `icon`, `window` (width/height), `title`, `version`, `categories`
+
 - `mkWineApp pkgs {...}` - Create Wine application wrapper with isolated prefix
+
+#### Color & Theme
+
 - `matugen.mkBase16Template {...}` - Generate base16 template for matugen
 - `matugen.mkTemplateConfig {...}` - Generate matugen template config
 - `matugen.mkDerivation {...}` - Build matugen derivation
+
+#### Monitor Utilities
+
 - `monitors.findPrimary monitors` - Find primary monitor from list
 - `monitors.findByName name monitors` - Find monitor by output name (e.g., "DP-1")
 - `monitors.filterEnabled monitors` - Filter to only enabled monitors
@@ -1233,7 +1276,7 @@ Complete flake.nix showing typical usage:
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-25.11";
 
     flake-parts.url = "github:hercules-ci/flake-parts";
     home-manager = {
