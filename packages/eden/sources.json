@@ -5,9 +5,9 @@
     "hash": "sha256-6vUtNI4lqPffcCpctVv0tDfoqTShaUDGNPEOmfmnkbU="
   },
   "sirit": {
-    "version": "v1.0.4",
-    "rev": "e3cf3924bf15875ea4ec8bf6af9d693dc2266db1",
-    "hash": "sha256-ThyUaoVmnYz9eQ1a19BbLhqfOpPxRjSovBl2wvlfRoI="
+    "version": "v1.0.5",
+    "rev": "b870b062998244231a4f08004d3b25151732c5c5",
+    "hash": "sha256-T4f1C33rh8KEXPyxPiIbdDUQLGT3ufTIt4XmgSsLRpA="
   },
   "mcl": {
     "rev": "5fc4beaf331037649b10625736b41365defb4f50",
@@ -18,9 +18,9 @@
     "hash": "sha256-zIczBSRDWjX9hcmYWYkbWY3NAAQwQtKhMTeHlYp4BKk="
   },
   "xbyak": {
-    "version": "7.35.3",
-    "rev": "560ca671421e47e32d3c8270623aaa74454570f4",
-    "hash": "sha256-qsv0cgm5AmH9Ip1cNX8fKEA5D2b/255ZhYtCQb9Kr5I="
+    "version": "7.36",
+    "rev": "53234fc2d0eb532268360a2c291cb69051e921d8",
+    "hash": "sha256-Mpo+T9zk6JE8HcwUg0hfUmQc/62tM2lmEoA5ElaLmnw="
   },
   "nx_tzdb": {
     "version": "120226",
