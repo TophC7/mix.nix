@@ -256,6 +256,27 @@ func main() {
 	// OnDomReady fires on every navigation — only redirect once.
 	var once sync.Once
 
+	// Zoom keybinds: Ctrl+=/- to zoom in/out, Ctrl+0 to reset, Ctrl+scroll.
+	// Persisted to localStorage so it survives page navigations.
+	const zoomScript = `(function(){
+if(window.__wailsZoom)return;window.__wailsZoom=true;
+var k='__wails_zoom',z=parseFloat(localStorage.getItem(k))||1;
+document.documentElement.style.zoom=z;
+document.addEventListener('keydown',function(e){
+if(!e.ctrlKey&&!e.metaKey)return;
+if(e.key==='='||e.key==='+'){e.preventDefault();z=Math.min(z+0.1,3)}
+else if(e.key==='-'){e.preventDefault();z=Math.max(z-0.1,0.3)}
+else if(e.key==='0'){e.preventDefault();z=1}
+else return;
+document.documentElement.style.zoom=z;
+localStorage.setItem(k,z.toFixed(1))});
+document.addEventListener('wheel',function(e){
+if(!e.ctrlKey&&!e.metaKey)return;
+e.preventDefault();
+if(e.deltaY<0)z=Math.min(z+0.1,3);else z=Math.max(z-0.1,0.3);
+document.documentElement.style.zoom=z;
+localStorage.setItem(k,z.toFixed(1))},{passive:false})})();`
+
 	err := wails.Run(&options.App{
 		Title:  cfg.Title,
 		Width:  cfg.Window.Width,
@@ -278,6 +299,7 @@ func main() {
 					fmt.Sprintf("window.location.replace(%s)", safeURL))
 				fmt.Printf("%s opened window at %s\n", tag, targetURL)
 			})
+			wailsrt.WindowExecJS(ctx, zoomScript)
 		},
 		OnShutdown: func(ctx context.Context) {
 			killChild(childCmd, childExited)
