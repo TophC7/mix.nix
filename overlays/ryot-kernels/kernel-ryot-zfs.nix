@@ -53,17 +53,19 @@ let
     autoModules = true;
   };
 
-  # Apply LLVM fixes and include CachyOS-patched ZFS module
-  # Use .extend to properly add zfs_cachyos to the extensible packages set.
-  # This preserves the packages' extensibility and ensures zfs_cachyos is
-  # recognized as a proper kernel module. The zfs-cachyos-lto package is
-  # already built with LTO, so it doesn't need kernelModuleLLVMOverride.
+  # Apply LLVM fixes and include CachyOS-patched ZFS module.
+  # Build zfs-cachyos directly against our kernel using the upstream's pattern
+  # (see nix-cachyos-kernel/kernel-cachyos/packages.nix). The flake's top-level
+  # `zfs-cachyos-lto` is a fully-realised derivation with no `.override`, so we
+  # callPackage the source ourselves and let `self.kernel` be auto-injected.
+  # We pin to the cachyos flake's nixpkgs to keep zfs/kernel patch versions
+  # in sync (matching the upstream's "do not follow nixpkgs" policy).
   packages = (helpers.kernelModuleLLVMOverride (final.linuxKernel.packagesFor kernel)).extend (
-    _self: _super: {
-      # CachyOS-patched ZFS for kernel compatibility
-      zfs_cachyos = cachyosKernels.zfs-cachyos-lto.override {
-        kernel = kernel;
-      };
+    self: _super: {
+      zfs_cachyos =
+        (self.callPackage "${inputs.nix-cachyos-kernel}/zfs-cachyos" {
+          inputs = { inherit (inputs.nix-cachyos-kernel.inputs) nixpkgs; };
+        }).latest;
     }
   );
 in
