@@ -14,13 +14,13 @@
     "hash": "sha256-7lHOjlUvCQsct/pijn0M0OOG5LpExmXwB6kH+ostA2I="
   },
   "frozen": {
-    "rev": "bbb46f414970162fb264f44e478653f42e010d68",
-    "hash": "sha256-WQapZx6t887KTmcqHWJk0eXnpXblleQPB4tRXdjnqDU="
+    "rev": "b07a5c8187bc3e6f1461efab89fe07f467e300db",
+    "hash": "sha256-eZdiLKUcx1MTcW+HyoRi6U/lUbs/qAQhRw0wX3tpUjY="
   },
   "xbyak": {
-    "version": "7.36.2",
-    "rev": "f74a7e2fdca293540ec65efa85e96cf6d9db6092",
-    "hash": "sha256-SrP5PYK9GrHQcR0bbwAXPxGCyd4J1qGqXFC1eVh9XVQ="
+    "version": "7.37",
+    "rev": "431abd865e70a46d56f5aa0e1f87572decb60169",
+    "hash": "sha256-uiTqRYdeGflBIY3+4W/9LprOxfw2FA9yvcH4srvEWq8="
   },
   "nx_tzdb": {
     "version": "120226",
