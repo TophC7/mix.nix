@@ -32,11 +32,11 @@ set -l sources (cat $sourcesFile)
 echo "=== Eden Source Updater ==="
 echo ""
 
-# ── eden (main source from Gitea, version from GitHub Releases) ──────────────
+# ── eden (main source and releases from Gitea) ──────────────────────────────
 
 echo "[ eden ] Checking..."
 set -l edenCurrent (echo $sources | jq -r '.eden.version')
-set -l edenLatest (curl -s 'https://api.github.com/repos/eden-emulator/Releases/releases/latest' | jq -r '.tag_name // empty')
+set -l edenLatest (curl -s 'https://git.eden-emu.dev/api/v1/repos/eden-emu/eden/releases?limit=1' | jq -r '.[0].tag_name // empty')
 
 if test -z "$edenLatest"
     echo "[ eden ] Warning: Could not fetch latest release"
@@ -101,7 +101,7 @@ end
 
 echo "[ mcl ] Checking..."
 set -l mclCurrent (echo $sources | jq -r '.mcl.rev')
-set -l mclLatest (curl -s 'https://api.github.com/repos/azahar-emu/mcl/commits?per_page=1' \
+set -l mclLatest (curl -s 'https://api.github.com/repos/azahar-emu/mcl/commits?sha=main&per_page=1' \
     | jq -r '.[0].sha // empty')
 
 if test -z "$mclLatest"

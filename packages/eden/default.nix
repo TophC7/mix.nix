@@ -43,6 +43,7 @@ let
 
   inherit (qt6)
     qtbase
+    qtcharts
     qtmultimedia
     qtwayland
     wrapQtAppsHook
@@ -199,6 +200,7 @@ stdenv.mkDerivation (finalAttrs: {
     mbedtls
     nlohmann_json
     qtbase
+    qtcharts
     qtmultimedia
     qtwayland
     qtwebengine

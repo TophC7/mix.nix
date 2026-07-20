@@ -11,24 +11,24 @@
 # Usage:
 #   # URL mode (self-hosted service)
 #   lib.desktop.mkWailsApp pkgs {
-#     pname = "catnip-desktop";
-#     desktopName = "Catnip";
-#     programName = "catnip-desktop";
+#     pname = "myapp-desktop";
+#     desktopName = "My App";
+#     programName = "myapp-desktop";
 #     icon = ./icon.png;
-#     url.default = "http://localhost:6369";
+#     url.default = "http://localhost:8080";
 #   }
 #
 #   # Command mode (spawn + wrap)
 #   lib.desktop.mkWailsApp pkgs {
-#     pname = "t3code-desktop";
-#     desktopName = "T3 Code";
-#     programName = "t3code-desktop";
-#     icon = "${t3code.src}/assets/prod/black-universal-1024.png";
+#     pname = "myapp-desktop";
+#     desktopName = "My App";
+#     programName = "myapp-desktop";
+#     icon = ./icon.png;
 #     command = {
-#       package = t3code;
-#       binName = "t3";
-#       args = [ "--no-browser" "--port" "{port}" "--host" "{host}" ];
-#       defaultPort = 18822;
+#       package = pkgs.myapp-cli;
+#       binName = "myapp";
+#       args = [ "serve" "--port" "{port}" "--host" "{host}" ];
+#       defaultPort = 8080;
 #     };
 #   }
 #

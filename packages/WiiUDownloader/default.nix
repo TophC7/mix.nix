@@ -17,16 +17,17 @@ let
 in
 buildGoModule rec {
   pname = "WiiUDownloader";
-  version = "2.68";
+  version = "2.98";
 
   src = fetchFromGitHub {
     owner = "Xpl0itU";
     repo = "WiiUDownloader";
     rev = "v${version}";
-    hash = "sha256-Xa1Td9BsuZq65N45/9/SvhbtTd0vXw8XIdavTp1i7kU=";
+    hash = "sha256-vLbf0tHumqBetqIoqQ/+foV6HA6b/8GqH2BwOaLVkRA=";
   };
 
-  vendorHash = "sha256-8/UoT+/1PK0yqHfBUllSeia1lX8l2YRz+5BhhViWIp4=";
+  modRoot = "cmd/WiiUDownloader";
+  vendorHash = "sha256-sr6p41U+OQd3uWVRM2g0vQel7vNG1rzddJ2Q/57TTls=";
 
   nativeBuildInputs = [
     pkg-config
@@ -39,10 +40,11 @@ buildGoModule rec {
     librsvg
   ];
 
-  # Copy the pre-fetched db.go
-  preBuild = ''
-    cp ${db-go} db.go
-    chmod +w db.go
+  # Inject the pre-fetched database after buildGoModule copies the fixed
+  # vendor tree, keeping database refreshes independent from vendorHash.
+  postConfigure = ''
+    chmod -R u+w vendor/github.com/Xpl0itU/WiiUDownloader
+    cp ${db-go} vendor/github.com/Xpl0itU/WiiUDownloader/db.go
   '';
 
   # Build flags from the GitHub Actions workflow
@@ -51,8 +53,7 @@ buildGoModule rec {
     "-w"
   ];
 
-  # The main package is in cmd/WiiUDownloader
-  subPackages = [ "cmd/WiiUDownloader" ];
+  subPackages = [ "." ];
 
   # Skip tests - they're extremely slow
   doCheck = false;

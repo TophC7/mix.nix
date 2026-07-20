@@ -4,8 +4,8 @@ let
 
   # 8BitDo Ultimate Software
   updaterZip = fetchurl {
-    url = "https://download.8bitdo.com/Ultimate-Software/8BitDo_Ultimate_Software_V2_Windows_V1.27.zip?00";
-    sha256 = "sha256-5ITFq/qWQN7vm3tC3NRX6AYRENNNFnte+/P3HT4/SGk=";
+    url = "https://support.8bitdo.com/bd-uploads/files/ultimate_soft/8BitDo_Ultimate_Software_V2_Windows_V1.34.zip";
+    sha256 = "sha256-yZ4OEwPHc8mwJgKpvLXNSQ1pKGMoK67dBv0toOvVuQA=";
   };
 
   # Extract the updater from the ZIP
@@ -19,14 +19,14 @@ let
     installPhase = ''
       mkdir -p $out
       # Copy ALL files from the extracted subdirectory (exe needs its DLLs and configs)
-      cp -r 8BitDo_Ultimate_Software_V2_V1.27/* $out/
+      cp -r 8BitDo_Ultimate_Software_V2_Windows_V1.34/* $out/
     '';
   };
 in
 lib.desktop.mkWineApp pkgs {
   name = "8bitdo-updater";
   is64bits = false;
-  wine = pkgs.wineWowPackages.waylandFull;
+  wine = pkgs.wineWow64Packages.waylandFull;
   executable = "${updaterSrc}/8BitDo Ultimate Software V2.exe";
 
   # Let winetricks handle fonts

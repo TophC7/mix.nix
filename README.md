@@ -1071,8 +1071,6 @@ Custom packages built by mix.nix.
 | `procon2-init`         | Nintendo Switch 2 Pro Controller USB initializer      |
 | `proton-cachyos`       | CachyOS Proton build (x86-64-v3)                      |
 | `proton-cachyos.v4`    | CachyOS Proton build (x86-64-v4, AVX-512)             |
-| `t3code`               | Web GUI for Claude Code agents and other AI providers |
-| `t3code-desktop`       | Native desktop wrapper for t3code (uses mkWailsApp) |
 | `WiiUDownloader`       | GUI to download Wii U content from Nintendo servers   |
 
 ```bash
@@ -1219,15 +1217,15 @@ For full container stack orchestration (networks, targets, dependencies), use th
   - **Command Mode Example** (CLI wrapper with auto-port):
     ```nix
     lib.desktop.mkWailsApp pkgs {
-      pname = "t3code-desktop";
-      desktopName = "T3 Code";
-      programName = "t3code-desktop";
-      icon = "${t3code.src}/assets/icon.png";
+      pname = "myapp-desktop";
+      desktopName = "My App";
+      programName = "myapp-desktop";
+      icon = ./icon.png;
       command = {
-        package = t3code;
-        binName = "t3";
-        args = [ "--no-browser" "--port" "{port}" "--host" "{host}" ];
-        defaultPort = 18822;
+        package = pkgs.myapp-cli;
+        binName = "myapp";
+        args = [ "serve" "--port" "{port}" "--host" "{host}" ];
+        defaultPort = 8080;
       };
       monoFont = {                        # Optional: override monospace font
         package = monocraft-nerd-fonts;

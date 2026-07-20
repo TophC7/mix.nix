@@ -6,11 +6,11 @@
 }:
 {
   spotify = prev.spotify.overrideAttrs (_: rec {
-    version = "1.2.74.477.g3be53afe";
-    rev = "89";
+    version = "1.2.92.147.g5b8f9367";
+    rev = "97";
     src = prev.fetchurl {
       url = "https://api.snapcraft.io/api/v1/snaps/download/pOBIoZ2LrCB3rDohMxoYGnbN14EHOgD7_${rev}.snap";
-      hash = "sha512-mn1w/Ylt9weFgV67tB435CoF2/4V+F6gu1LUXY07J6m5nxi1PCewHNFm8/11qBRO/i7mpMwhcRXaiv0HkFAjYA==";
+      hash = "sha512-Gk0/WjfgJZIG+2w4teaznAk/7evOXUsuCikDvOhmhAQ5ksQV99VeiYnE+OJf7hHnrPaHoueERvIkk7Psed/kwA==";
     };
   });
 }
