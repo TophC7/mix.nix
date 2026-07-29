@@ -18,9 +18,9 @@
     "hash": "sha256-eZdiLKUcx1MTcW+HyoRi6U/lUbs/qAQhRw0wX3tpUjY="
   },
   "xbyak": {
-    "version": "7.37.5",
-    "rev": "2d985610ec07c601c8a0f6f516e3419e91a17ae4",
-    "hash": "sha256-a4DR7hoPwJa105Ry8Znm+4a2Ob7210Xb/nVcZ7TgH8I="
+    "version": "7.37.6",
+    "rev": "061f28626e772ef5a1982a4a444591652e362e13",
+    "hash": "sha256-NA4h4BEzYh7gSVOqznixoU2VjKZYx8dde+Es7dOQiOM="
   },
   "nx_tzdb": {
     "version": "120226",
