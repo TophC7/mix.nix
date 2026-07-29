@@ -270,9 +270,9 @@ stdenv.mkDerivation (finalAttrs: {
     NIX_CFLAGS_COMPILE = lib.optionalString stdenv.hostPlatform.isx86_64 "-msse4.2";
   };
 
-  qtWrapperArgs = [
-    "--prefix LD_LIBRARY_PATH : ${vulkan-loader}/lib"
-  ];
+  preFixup = ''
+    qtWrapperArgs+=(--prefix LD_LIBRARY_PATH : ${vulkan-loader}/lib)
+  '';
 
   preConfigure = ''
     # Provide version info for builds without .git
