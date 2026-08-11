@@ -55,13 +55,13 @@ let
 
   # Apply LLVM fixes and include CachyOS-patched ZFS module.
   # callPackage the upstream zfs-cachyos source directly so `self.kernel` is
-  # auto-injected. Upstream takes a `variant` arg (defaults to "latest") and
-  # returns the package directly. We pin to the cachyos flake's nixpkgs to
-  # keep zfs/kernel patch versions in sync.
+  # auto-injected. Pin its concrete metadata key; upstream no longer provides
+  # the old "latest" default. Keep its nixpkgs pinned for patch compatibility.
   packages = (helpers.kernelModuleLLVMOverride (final.linuxKernel.packagesFor kernel)).extend (
     self: _super: {
       zfs_cachyos = self.callPackage "${inputs.nix-cachyos-kernel}/zfs-cachyos" {
         inputs = { inherit (inputs.nix-cachyos-kernel.inputs) nixpkgs; };
+        variant = "linux-cachyos";
       };
     }
   );
