@@ -4,7 +4,7 @@
 # Each CPU variant tracks the newest upstream release that publishes its tarball.
 
 set -l scriptDir (dirname (status filename))
-set -l variants v3 v4
+set -l variants baseline v3
 
 # Check dependencies
 for cmd in curl jq nix-prefetch-url nix-hash
@@ -28,14 +28,20 @@ echo ""
 set -l updated 0
 
 for variant in $variants
-    set -l versionsFile "$scriptDir/versions-$variant.json"
+    set -l architecture x86_64
+    set -l versionsFile "$scriptDir/versions.json"
+    if test "$variant" != baseline
+        set architecture "x86_64_$variant"
+        set versionsFile "$scriptDir/versions-$variant.json"
+    end
 
     if not test -f $versionsFile
         echo "[$variant] Warning: $versionsFile not found, skipping"
         continue
     end
 
-    set -l latestTag (printf '%s' "$releasesJson" | jq -r --arg variant "$variant" 'first(.[] | select(any(.assets[]?; (.name | endswith("_" + $variant + ".tar.xz")))) | .tag_name) // empty')
+    set -l assetSuffix "$architecture.tar.xz"
+    set -l latestTag (printf '%s' "$releasesJson" | jq -r --arg suffix "$assetSuffix" 'first(.[] | select(any(.assets[]?; (.name | endswith($suffix)))) | .tag_name) // empty')
 
     if test -z "$latestTag" -o "$latestTag" = null
         echo "[$variant] Warning: No recent release asset found, skipping"
@@ -66,7 +72,7 @@ for variant in $variants
     end
 
     # Construct download URL and fetch hash
-    set -l fileName "proton-cachyos-$latestBase-$latestRelease-slr-x86_64_$variant.tar.xz"
+    set -l fileName "proton-cachyos-$latestBase-$latestRelease-slr-$architecture.tar.xz"
     set -l downloadUrl "https://github.com/CachyOS/proton-cachyos/releases/download/$latestTag/$fileName"
 
     echo "[$variant] Fetching hash for: $fileName"

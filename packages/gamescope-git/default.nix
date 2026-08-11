@@ -37,6 +37,10 @@ let
       inherit pname src;
       version = versionInfo.version;
 
+      # Git master tests are unstable and not part of package validation.
+      doCheck = false;
+      mesonFlags = (prevAttrs.mesonFlags or [ ]) ++ [ "-Denable_tests=false" ];
+
       postPatch = (prevAttrs.postPatch or "") + ''
         # Inject git rev into WSI layer identification
         substituteInPlace layer/VkLayer_FROG_gamescope_wsi.cpp \
