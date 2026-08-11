@@ -24,6 +24,20 @@ with lib;
 let
   cfg = config.services.newt;
   containers = lib.infra.containers;
+  prepareNetworks = pkgs.writeScript "newt-prepare-networks" ''
+    #!${lib.getExe pkgs.fish}
+    if not ${pkgs.docker}/bin/docker network inspect ${escapeShellArg cfg.networkName} >/dev/null 2>&1
+      ${pkgs.docker}/bin/docker network create --driver bridge ${escapeShellArg cfg.networkName}
+      or exit 1
+    end
+
+    ${concatMapStringsSep "\n" (network: ''
+      if not ${pkgs.docker}/bin/docker network inspect ${escapeShellArg network} >/dev/null 2>&1
+        echo "Required Docker network ${escapeShellArg network} does not exist" >&2
+        exit 1
+      end
+    '') cfg.extraNetworks}
+  '';
 in
 {
   # Disable upstream native module to avoid conflicts
@@ -162,31 +176,20 @@ in
 
     # Container service configuration
     systemd.services."docker-newt" = {
-      serviceConfig = containers.serviceDefaults;
-      after = mkIf (!cfg.useHostNetwork) [
-        "docker-network-${cfg.networkName}.service"
-      ];
-      requires = mkIf (!cfg.useHostNetwork) [
-        "docker-network-${cfg.networkName}.service"
-      ];
+      serviceConfig =
+        containers.serviceDefaults
+        // optionalAttrs (!cfg.useHostNetwork) {
+          # Recheck immediately before every start: Docker prune may remove idle networks.
+          ExecStartPre = mkBefore [ "${prepareNetworks}" ];
+        };
       partOf = [ "docker-newt-root.target" ];
       wantedBy = [ "docker-newt-root.target" ];
     };
 
-    # Docker network service (bridge mode only)
-    systemd.services."docker-network-${cfg.networkName}" = mkIf (!cfg.useHostNetwork) {
-      path = [ pkgs.docker ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        ExecStop = "${pkgs.docker}/bin/docker network rm -f ${cfg.networkName}";
-      };
-      script = ''
-        docker network inspect ${cfg.networkName} || docker network create --driver bridge ${cfg.networkName}
-      '';
-      partOf = [ "docker-newt-root.target" ];
-      wantedBy = [ "docker-newt-root.target" ];
-    };
+    # A persistent prune timer may fire during boot. Let Newt claim its network first.
+    systemd.services.docker-prune.after = mkIf config.virtualisation.docker.autoPrune.enable [
+      "docker-newt-root.target"
+    ];
 
     # Root target for orchestration
     systemd.targets."docker-newt-root" = {
