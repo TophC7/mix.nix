@@ -166,6 +166,7 @@ stdenv.mkDerivation (finalAttrs: {
 
   patches = [
     ./discord-rpc-compat.patch
+    ./httplib-0.53-compat.patch
   ];
 
   nativeBuildInputs = [
