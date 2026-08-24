@@ -1,0 +1,42 @@
+diff --git a/ngc/config.py b/ngc/config.py
+index 1031899..b3ab5bd 100644
+--- a/ngc/config.py
++++ b/ngc/config.py
+@@ -8,6 +8,7 @@ from __future__ import annotations
+ import json
+ import os
+ import shutil
++import subprocess
+ from dataclasses import asdict, dataclass, field
+ from pathlib import Path
+ from typing import Optional
+@@ -19,18 +20,20 @@ CONFIG_BACKUP = CONFIG_DIR / "config.json.bak"
+ 
+ 
+ def detect_adapter() -> Optional[str]:
+-    """Return the first Bluetooth adapter's address from sysfs (no root needed)."""
+-    base = Path("/sys/class/bluetooth")
+-    if not base.exists():
++    """Return the first Bluetooth adapter's address reported by BlueZ."""
++    try:
++        output = subprocess.run(
++            ["bluetoothctl", "list"],
++            check=True,
++            capture_output=True,
++            text=True,
++        ).stdout
++    except (OSError, subprocess.CalledProcessError):
+         return None
+-    for hci in sorted(base.iterdir()):
+-        addr = hci / "address"
+-        if addr.exists():
+-            try:
+-                return addr.read_text().strip().upper()
+-            except OSError:
+-                continue
++    for line in output.splitlines():
++        if line.startswith("Controller "):
++            return line.split(maxsplit=2)[1].upper()
+     return None
+ 
+ 
