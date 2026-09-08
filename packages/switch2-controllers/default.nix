@@ -88,7 +88,10 @@ stdenvNoCC.mkDerivation {
     hash = "sha256-8FBf4EBFeibLxx7ltbtpECo59zP+NgqGqReuxC2Uowk=";
   };
 
-  patches = [ ./detect-adapter.patch ];
+  patches = [
+    ./detect-adapter.patch
+    ./clean-exit-on-hub-crash.patch
+  ];
 
   nativeBuildInputs = [ makeWrapper ];
 

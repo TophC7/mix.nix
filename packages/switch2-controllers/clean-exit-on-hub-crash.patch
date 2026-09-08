@@ -1,0 +1,38 @@
+--- a/ngc/bridge.py
++++ b/ngc/bridge.py
+@@ -239,15 +239,17 @@
+         return True
+ 
+     def _run_async(self) -> None:
+-        while not self.stop.is_set():
+-            try:
+-                self._hub_error = ""
+-                asyncio.run(self._scan_loop())
+-            except Exception as exc:  # noqa: BLE001
+-                self._hub_error = str(exc)
+-                logger.exception("connect hub crashed; restarting in 1s")
+-                time.sleep(1)
+-
++        try:
++            self._hub_error = ""
++            asyncio.run(self._scan_loop())
++        except Exception as exc:  # noqa: BLE001
++            self._hub_error = str(exc)
++            logger.exception("connect hub crashed; exiting for clean service restart")
++            if self.bridge is not None:
++                self.bridge._fatal_error = str(exc)
++                self.bridge.stop()
++                time.sleep(3.0)
++            os._exit(1)
+     async def _scan_loop(self) -> None:
+         hub = self
+         hub._loop = asyncio.get_running_loop()
+@@ -705,6 +707,8 @@
+         if self.hub._executor is not None:
+             self.hub._executor.shutdown(wait=False, cancel_futures=True)
+         clear_state()
++        if getattr(self, "_fatal_error", None):
++            raise RuntimeError(f"bridge terminated due to error: {self._fatal_error}")
+ 
+     def stop(self) -> None:
+         self._stop.set()
