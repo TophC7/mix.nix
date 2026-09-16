@@ -15,7 +15,7 @@
     ./secrets.nix
     ./modules.nix
     (import ./overlays.nix { inherit mixInputs; })
-    ./packages.nix
+    (import ./packages.nix { inherit mixInputs; })
     ./devshell.nix
   ];
 }

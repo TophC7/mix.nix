@@ -5,6 +5,16 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-26.05";
 
+    # Oh My Pi agent harness. Deliberately un-followed nixpkgs: upstream builds
+    # `packages.omp` against its own pin, and its generated bun.nix is keyed to
+    # that pin's bun2nix.
+    omp.url = "github:can1357/oh-my-pi?ref=refs/pull/11730/head";
+
+    context-mode = {
+      url = "github:mksglu/context-mode/v1.0.169";
+      flake = false;
+    };
+
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
@@ -67,7 +77,7 @@
         secrets = ./parts/secrets.nix;
         modules = ./parts/modules.nix;
         overlays = import ./parts/overlays.nix { inherit mixInputs; };
-        packages = ./parts/packages.nix;
+        packages = import ./parts/packages.nix { inherit mixInputs; };
         devshell = ./parts/devshell.nix;
       };
     };

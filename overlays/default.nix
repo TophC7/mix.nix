@@ -32,7 +32,7 @@ let
 
   # Import all custom packages
   packages = import ../packages {
-    inherit lib;
+    inherit lib inputs;
     pkgs = final;
   };
 
