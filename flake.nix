@@ -8,7 +8,7 @@
     # Oh My Pi agent harness. Deliberately un-followed nixpkgs: upstream builds
     # `packages.omp` against its own pin, and its generated bun.nix is keyed to
     # that pin's bun2nix.
-    omp.url = "github:can1357/oh-my-pi?ref=refs/pull/11730/head";
+    omp.url = "github:can1357/oh-my-pi";
 
     context-mode = {
       url = "github:mksglu/context-mode/v1.0.169";
