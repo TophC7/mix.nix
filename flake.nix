@@ -5,16 +5,6 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-26.05";
 
-    # Oh My Pi agent harness. Deliberately un-followed nixpkgs: upstream builds
-    # `packages.omp` against its own pin, and its generated bun.nix is keyed to
-    # that pin's bun2nix.
-    omp.url = "github:can1357/oh-my-pi";
-
-    context-mode = {
-      url = "github:mksglu/context-mode/v1.0.169";
-      flake = false;
-    };
-
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
@@ -26,7 +16,16 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # For theme generation (Material You colors from wallpaper)
+    omp = {
+      url = "github:can1357/oh-my-pi";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    context-mode = {
+      url = "github:mksglu/context-mode/v1.0.169";
+      flake = false;
+    };
+
     matugen = {
       url = "github:InioX/Matugen";
       inputs.nixpkgs.follows = "nixpkgs";
