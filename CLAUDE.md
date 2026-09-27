@@ -200,7 +200,7 @@ Ask: "Should this be configurable, or should it follow convention?"
 ### lib.fs
 
 Filesystem utilities for auto-discovery:
-- `scanPaths` - Returns paths to all importable modules in a directory
+- `scanPaths` - Returns paths to all importable modules in a directory (warns if it contains `home/` or `home.nix`, i.e. a mixed NixOS/HM root)
 - `scanNames` - Returns just filenames (not full paths)
 - `scanAttrs` - Returns attrset of `{ name = ./path; }` for module indices
 - `importAndMerge` - Import all files and merge their attrsets
@@ -225,11 +225,13 @@ Host and user management:
 - `lib.hosts.mkHostSpecType` - Build hostSpec type with extension modules
 - `lib.hosts.mkHosts` - Build `nixosConfigurations` from specs
 
+**API v2 layout**: `mkHost`/`mkHosts` read a fixed consumer layout under `inputs.self` (`hosts/`, `modules/{core,features,users}/`, optional `extends` fallback root, exposed as `mix.extends` in flake-parts); the contract lives in the header of `lib/hosts/mkHost.nix`. v1 keeps its location options.
+
 **Namespace convention**: Types live under `.types.*`, base modules under `.modules.*`, builder functions at top level.
 
-**Composable Extensions**: To extend hostSpec/userSpec from other flakes, use `mix.hostSpecExtensions` and `mix.userSpecExtensions`. This allows multiple extension flakes (like arroz.nix, play.nix) to add options without conflicts.
+**Composable Extensions**: To extend hostSpec/userSpec from other flakes, use `mix.hostSpecExtensions` and `mix.userSpecExtensions`. This allows multiple extension flakes to add options without conflicts.
 
-**Extension: arroz.nix** - For desktop environment and greeter configuration options (desktop DE type, auto-login, etc.), use the [arroz.nix](https://github.com/toph/arroz.nix) extension which adds these via `mix.hostSpecExtensions`.
+**Extension example**: See [dot.nix](https://github.com/tophc7/dot.nix) (`mix/hostSpec.nix`) for custom host options (desktop type, server roles, hardware flags) added via `mix.hostSpecExtensions`.
 
 ### lib.infra
 

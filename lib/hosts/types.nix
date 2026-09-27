@@ -8,6 +8,7 @@
 #   # For composable extensions (used by parts/hosts.nix):
 #   lib.hosts.modules.baseUserSpec   # Base user module (for submoduleWith imports)
 #   lib.hosts.modules.baseHostSpec   # Base host module (for submoduleWith imports)
+#   lib.hosts.modules.v1HostSpec     # API v1 host flags (isMinimal), added only under v1
 #
 #   # Build types with extensions:
 #   lib.hosts.mkUserSpecType [ extraModule1 extraModule2 ]
@@ -25,7 +26,7 @@ let
   # ─────────────────────────────────────────────────────────────
 
   # Base user options module (can be used with submoduleWith imports)
-  # Home Manager is auto-enabled via usersHomeDir discovery (no explicit option needed)
+  # Home Manager profiles are discovered from usersHomeDir/<name> (both API versions)
   baseUserSpec = {
     # Allow arbitrary additional attributes for extensions
     freeformType = t.attrsOf t.anything;
@@ -115,12 +116,6 @@ let
           default = false;
         };
 
-        isMinimal = mkOption {
-          type = t.bool;
-          description = "Minimal HM config (only coreHomeModules, skip user/host HM directories)";
-          default = false;
-        };
-
         # ── Advanced ──
         specialArgs = mkOption {
           type = t.attrsOf t.unspecified;
@@ -130,6 +125,16 @@ let
       };
     };
 
+  # API v1 only: the builder trims a minimal host's HM to secrets + coreHomeModules.
+  # v2 builders act on no such flag; consumers declare their own via hostSpecExtensions.
+  v1HostSpec = {
+    options.isMinimal = mkOption {
+      type = t.bool;
+      description = "API v1: minimal HM config (only secrets + coreHomeModules; user/host HM skipped)";
+      default = false;
+    };
+  };
+
 in
 {
   # ─────────────────────────────────────────────────────────────
@@ -138,8 +143,7 @@ in
 
   # Base modules - for composable extension via submoduleWith imports
   modules = {
-    baseUserSpec = baseUserSpec;
-    baseHostSpec = baseHostSpec;
+    inherit baseUserSpec baseHostSpec v1HostSpec;
   };
 
   # Types namespace - contains default (non-extended) type definitions
@@ -147,8 +151,13 @@ in
     # User specification type (default, no extensions)
     userSpec = t.submodule baseUserSpec;
 
-    # Host specification type (default, no extensions)
-    hostSpec = t.submodule baseHostSpec;
+    # Host specification type (default API v1 shape, including isMinimal)
+    hostSpec = t.submoduleWith {
+      modules = [
+        baseHostSpec
+        v1HostSpec
+      ];
+    };
   };
 
   # ─────────────────────────────────────────────────────────────
@@ -163,11 +172,16 @@ in
       modules = [ baseUserSpec ] ++ extensionModules;
     };
 
-  # Build a hostSpec type from a list of extension modules
+  # Build a hostSpec type from a list of extension modules (API v1 shape, like
+  # types.hostSpec: includes isMinimal). v2 frontends build from baseHostSpec directly.
   # Usage: mkHostSpecType [ ./extensions/desktop.nix ./extensions/gaming.nix ]
   mkHostSpecType =
     extensionModules:
     t.submoduleWith {
-      modules = [ baseHostSpec ] ++ extensionModules;
+      modules = [
+        baseHostSpec
+        v1HostSpec
+      ]
+      ++ extensionModules;
     };
 }

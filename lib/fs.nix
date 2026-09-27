@@ -58,11 +58,20 @@ in
   #   # Returns: [ ./modules/foo ./modules/bar.nix ./modules/baz ]
   scanPaths =
     path:
-    builtins.map (f: (path + "/${f}")) (
-      builtins.attrNames (
-        lib.attrsets.filterAttrs isImportable (builtins.readDir path)
-      )
-    );
+    let
+      entries = builtins.readDir path;
+      hasHome =
+        (entries ? "home" && entries.home == "directory")
+        || (entries ? "home.nix" && entries."home.nix" == "regular");
+      paths = builtins.map (f: (path + "/${f}")) (
+        builtins.attrNames (lib.attrsets.filterAttrs isImportable entries)
+      );
+    in
+    lib.warnIf hasHome ''
+      mix.nix: lib.fs.scanPaths ${toString path} found a 'home' directory or 'home.nix' file.
+      If this directory is a NixOS host root or feature root, scanning it imports Home Manager modules into NixOS, which usually fails with "The option 'home' does not exist".
+      Keep mixed-context roots explicit (list imports directly, or scan a dedicated subfolder like ./config).
+    '' paths;
 
   # Scan a directory and return just the filenames (not full paths)
   # Useful when you need to import with custom logic

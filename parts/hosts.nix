@@ -4,17 +4,17 @@
 #   - `mix.users` option: Define users once (referenced by hosts)
 #   - `mix.hosts` option: Define hosts declaratively (reference users by name)
 #   - `mix.hostSpecExtensions` / `mix.userSpecExtensions`: Composable type extensions
-#   - `mix.coreModules` / `mix.coreHomeModules`: Always-applied modules
+#   - `mix.apiVersion`: Configuration API version (1 default/deprecated, 2 current)
+#   - `mix.extends`: v2-only fallback layout root (e.g. a sibling flake reusing core/features)
+#   - `mix.coreModules` / `mix.coreHomeModules` / `mix.hostsDir` / `mix.hostsHomeDir` /
+#     `mix.usersHomeDir`: v1-only locations (v2 uses a fixed layout)
 #   - Automatic `nixosConfigurations` generation
 #
 # Usage in your flake.nix:
 #   imports = [ inputs.mix-nix.flakeModules.hosts ];
 #
-# Extending with custom options (from extension flakes like arroz.nix):
-#   # arroz.nix/parts/hosts.nix
-#   { config, ... }: {
-#     config.mix.hostSpecExtensions = [ ../lib/hostSpec.nix ];
-#   }
+# Extending with custom options (e.g. hostSpec.nix in your repository):
+#   config.mix.hostSpecExtensions = [ ./hostSpec.nix ];
 #
 #   # Where hostSpec.nix is a module adding options:
 #   { lib, ... }: {
@@ -22,34 +22,38 @@
 #     options.greeter = lib.mkOption { ... };
 #   }
 #
-# Configuration:
+# Configuration (API v2): the layout is fixed, relative to the flake root (inputs.self):
+#   hosts/<hostname>/          host NixOS (or hosts/<hostname>.nix); home/ or home.nix inside
+#                              a host directory is that host's HM for its enrolled user
+#   modules/core/              NixOS for every host (or modules/core.nix); home/ or home.nix
+#                              inside it goes to home-manager.sharedModules
+#   modules/users/<username>/  HM profile (or <username>.nix); enrolls the user
+#   modules/features/<name>/   nixos.nix and/or home.nix, loaded with lib.features [ "<name>" ]
+#
 #   mix = {
-#     # Core modules applied to ALL hosts
-#     coreModules = [ ./modules/global/core ];
-#     coreHomeModules = [ ./home/global/core ];
-#
-#     # Directory auto-discovery (supports both dirs and flat files)
-#     hostsDir = ./hosts;           # NixOS: hosts/<hostname>/ or hosts/<hostname>.nix
-#     hostsHomeDir = ./home/hosts;  # HM: home/hosts/<hostname>/ or home/hosts/<hostname>.nix
-#     usersHomeDir = ./home/users;  # HM: home/users/<username>/ or home/users/<username>.nix
-#
-#     # Define users (referenced by hosts)
-#     # HM auto-enabled if file exists in usersHomeDir
-#     users = {
-#       toph = {
-#         name = "toph";
-#         shell = pkgs.fish;
-#       };
+#     apiVersion = 2;
+#     users.toph = {
+#       name = "toph";
+#       shell = "fish";
 #     };
-#
-#     # Define hosts (reference users by name)
-#     hosts = {
-#       desktop = {
-#         user = "toph";  # String reference to mix.users.toph
-#         desktop.niri.enable = true;  # From arroz.nix extension
-#       };
+#     hosts.desktop = {
+#       user = "toph";  # String reference to mix.users.toph
+#       desktop = "gnome";  # From hostSpecExtensions
 #     };
 #   };
+#
+# API v1 (default when mix.apiVersion is omitted; deprecated, emits one warning):
+#   mix = {
+#     coreModules = [ ./modules/global/core ];
+#     coreHomeModules = [ ./home/global/core ];
+#     hostsDir = ./hosts;
+#     hostsHomeDir = ./home/hosts;  # HM: home/hosts/<hostname>/ or home/hosts/<hostname>.nix
+#     usersHomeDir = ./home/users;  # HM: home/users/<username>/ or home/users/<username>.nix
+#     users.toph = { name = "toph"; shell = "fish"; };  # HM auto-enabled if file exists in usersHomeDir
+#     hosts.desktop.user = "toph";
+#   };
+#   v1 will be removed in a future breaking update; omitted/1 will then fail with
+#   migration guidance instead of silently switching to v2.
 #
 
 # Receives mixInputs from flake.nix closure to forward mix.nix's inputs to consumers
@@ -58,15 +62,78 @@
   inputs,
   lib,
   config,
+  options,
   ...
 }:
 let
   # Merge inputs: mix.nix provides base, consumer can override
   # Consumer's inputs take precedence (rightmost wins in //)
   mergedInputs = mixInputs // inputs;
+
+  # Forward version-specific options only when explicitly defined, so the other version
+  # rejects even explicit [ ]/null while ignoring declared defaults. The declaration's
+  # default is a lone mkOptionDefault (priority 1500) entry; any stronger or extra
+  # same-priority definition is explicit. Definitions weaker than the default never take effect.
+  explicitVersionOnly = lib.filterAttrs (
+    name: _:
+    let
+      opt = options.mix.${name};
+    in
+    opt.highestPrio < (lib.mkOptionDefault null).priority
+    || builtins.length opt.definitionsWithLocations > 1
+  ) {
+    inherit (config.mix)
+      coreModules
+      coreHomeModules
+      hostsDir
+      hostsHomeDir
+      usersHomeDir
+      extends
+      ;
+  };
+
+  # v1 keeps the public builder's shape (with isMinimal); v2 builds from the bare base
+  hostSpecType =
+    if config.mix.apiVersion == 1 then
+      lib.hosts.mkHostSpecType config.mix.hostSpecExtensions
+    else
+      lib.types.submoduleWith {
+        modules = [ lib.hosts.modules.baseHostSpec ] ++ config.mix.hostSpecExtensions;
+      };
+
+  # v1's isMinimal changed Home Manager; under v2 an undeclared (freeform) isMinimal would
+  # be silently ignored, so migrated configs fail loudly instead
+  strayMinimal = lib.attrNames (lib.filterAttrs (_: spec: spec ? isMinimal) config.mix.hosts);
+  checkMinimal =
+    if config.mix.apiVersion == 2 && strayMinimal != [ ] && !(hostSpecType.getSubOptions [ ] ? isMinimal) then
+      throw "mix.nix: apiVersion = 2 has no isMinimal (set on: ${lib.concatStringsSep ", " strayMinimal}). Remove it, or declare it via mix.hostSpecExtensions and read host.isMinimal in your modules."
+    else
+      lib.id;
 in
 {
   options.mix = {
+    # ─────────────────────────────────────────────────────────────
+    # API VERSION
+    # ─────────────────────────────────────────────────────────────
+
+    apiVersion = lib.mkOption {
+      # Plain int: lib.hosts.mkHosts validates (1 or 2) and emits migration guidance
+      type = lib.types.int;
+      default = 1;
+      description = ''
+        Configuration API version (1 or 2).
+        1 (default, deprecated): original API; locations come from hostsDir, hostsHomeDir,
+        usersHomeDir, coreModules and coreHomeModules. Evaluating it emits one deprecation
+        warning. Set 2 after migrating.
+        2: fixed layout under the flake root (hosts/, modules/core, modules/features/,
+        modules/users/); the v1 location options are rejected when set (even to [ ] or null).
+        extends is v2-only; v1 rejects it when set.
+        A future breaking update will remove v1; omitted/1 will then fail with migration
+        guidance rather than silently switching to v2.
+      '';
+      example = 2;
+    };
+
     # ─────────────────────────────────────────────────────────────
     # TYPE EXTENSIONS - Allow other flakes to extend specs
     # ─────────────────────────────────────────────────────────────
@@ -78,7 +145,7 @@ in
         Modules to compose into the hostSpec type.
         Extensions can add options that become available on all hosts.
 
-        Example extension module (e.g., arroz.nix adding desktop options):
+        Example extension module (e.g., adding desktop options):
           { lib, ... }: {
             options.desktop = lib.mkOption {
               type = lib.types.submodule { ... };
@@ -88,7 +155,7 @@ in
       '';
       example = lib.literalExpression ''
         [
-          # From arroz.nix
+          # From hostSpec extension
           ({ lib, ... }: {
             options.desktop.niri.enable = lib.mkEnableOption "Niri compositor";
             options.greeter.type = lib.mkOption { type = lib.types.str; default = "tuigreet"; };
@@ -125,7 +192,10 @@ in
       description = ''
         User definitions (referenced by hosts).
         Users are defined once and can be reused across multiple hosts.
-        Home Manager is auto-enabled if a config exists in usersHomeDir/<username>.
+        Home Manager enrollment: a user is enrolled (home-manager.users.<name>) only
+        when its profile exists (v2: modules/users/<name>; v1: usersHomeDir/<name>).
+        v2: Home Manager integration loads whenever mix.homeManager is non-null.
+        v1: Home Manager integration loads only for users with a profile.
 
         To extend with custom options, add modules to mix.userSpecExtensions.
       '';
@@ -135,12 +205,10 @@ in
             name = "toph";
             uid = 1000;
             shell = pkgs.fish;
-            # HM auto-enabled if usersHomeDir/toph.nix or usersHomeDir/toph/ exists
           };
           admin = {
             name = "admin";
             shell = pkgs.bash;
-            # No HM if no file exists in usersHomeDir
           };
         }
       '';
@@ -151,8 +219,7 @@ in
     # ─────────────────────────────────────────────────────────────
 
     hosts = lib.mkOption {
-      # Type is built lazily from base + extensions
-      type = lib.types.attrsOf (lib.hosts.mkHostSpecType config.mix.hostSpecExtensions);
+      type = lib.types.attrsOf hostSpecType;
       default = { };
       description = ''
         Declarative host specifications.
@@ -176,15 +243,32 @@ in
     };
 
     # ─────────────────────────────────────────────────────────────
-    # CORE MODULES - Applied to ALL hosts
+    # V2 LAYOUT
+    # ─────────────────────────────────────────────────────────────
+
+    extends = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      description = ''
+        API v2 only: another layout root this flake builds on. Hosts, users and
+        features resolve in this flake first, then in the extended root; the extended
+        root's modules/core applies before this flake's own. One level only (the
+        extended root's own extends is not followed).
+        Rejected under apiVersion = 1 (even null).
+      '';
+      example = lib.literalExpression "../.";
+    };
+
+    # ─────────────────────────────────────────────────────────────
+    # V1 LOCATIONS (rejected under apiVersion = 2)
     # ─────────────────────────────────────────────────────────────
 
     coreModules = lib.mkOption {
       type = lib.types.listOf lib.types.deferredModule;
       default = [ ];
       description = ''
-        NixOS modules applied to EVERY host.
-        Use this for your global/core configurations.
+        API v1 only: NixOS modules applied to EVERY host.
+        v2 imports modules/core instead; rejected under apiVersion = 2 (even [ ]).
       '';
       example = lib.literalExpression ''
         [
@@ -198,8 +282,8 @@ in
       type = lib.types.listOf lib.types.deferredModule;
       default = [ ];
       description = ''
-        Home Manager modules applied to EVERY host (that has HM enabled).
-        Use this for your global/core home configurations.
+        API v1 only: Home Manager modules applied to EVERY host (that has HM enabled).
+        v2 shares modules/core/home instead; rejected under apiVersion = 2 (even [ ]).
       '';
       example = lib.literalExpression ''
         [
@@ -209,19 +293,13 @@ in
       '';
     };
 
-    # ─────────────────────────────────────────────────────────────
-    # OPTIONAL CONFIGURATION
-    # ─────────────────────────────────────────────────────────────
-
     hostsDir = lib.mkOption {
       type = lib.types.nullOr lib.types.path;
       default = null;
       description = ''
-        Directory containing per-host NixOS configurations.
-        Supports both directory and flat file structures:
-          - Directory: <hostsDir>/<hostname>/ (with default.nix)
-          - Flat file: <hostsDir>/<hostname>.nix
-        Directories take precedence if both exist.
+        API v1 only: directory containing per-host NixOS configurations
+        (<hostsDir>/<hostname>/ or <hostsDir>/<hostname>.nix; directories first).
+        v2 uses hosts/ at the flake root; rejected under apiVersion = 2 (even null).
       '';
       example = lib.literalExpression "./hosts";
     };
@@ -230,11 +308,9 @@ in
       type = lib.types.nullOr lib.types.path;
       default = null;
       description = ''
-        Directory containing per-host Home Manager configurations.
-        Supports both directory and flat file structures:
-          - Directory: <hostsHomeDir>/<hostname>/ (with default.nix)
-          - Flat file: <hostsHomeDir>/<hostname>.nix
-        Directories take precedence if both exist.
+        API v1 only: directory containing per-host Home Manager configurations
+        (<hostsHomeDir>/<hostname>/ or <hostsHomeDir>/<hostname>.nix; directories first).
+        v2 uses hosts/<hostname>/home instead; rejected under apiVersion = 2 (even null).
       '';
       example = lib.literalExpression "./home/hosts";
     };
@@ -243,15 +319,17 @@ in
       type = lib.types.nullOr lib.types.path;
       default = null;
       description = ''
-        Directory containing per-user Home Manager configurations.
-        Supports both directory and flat file structures:
-          - Directory: <usersHomeDir>/<username>/ (with default.nix)
-          - Flat file: <usersHomeDir>/<username>.nix
-        Directories take precedence if both exist.
-        Home Manager is automatically enabled for users whose config exists here.
+        API v1 only: directory containing per-user Home Manager profiles
+        (<usersHomeDir>/<username>/ or <usersHomeDir>/<username>.nix; directories first).
+        A user is enrolled in Home Manager only when its profile exists here.
+        v2 uses modules/users/ instead; rejected under apiVersion = 2 (even null).
       '';
       example = lib.literalExpression "./home/users";
     };
+
+    # ─────────────────────────────────────────────────────────────
+    # OPTIONAL CONFIGURATION
+    # ─────────────────────────────────────────────────────────────
 
     homeManager = lib.mkOption {
       type = lib.types.nullOr lib.types.attrs;
@@ -259,6 +337,7 @@ in
       description = ''
         Home Manager input for automatic integration.
         Defaults to inputs.home-manager if available.
+        v1: integration also requires the user's usersHomeDir profile.
       '';
     };
 
@@ -284,7 +363,7 @@ in
       readOnly = true;
       description = ''
         mix.nix's original flake inputs.
-        Available for extension flakes (like arroz.nix) that need to access
+        Available for extension flakes that need to access
         mix.nix's dependencies without consumers having to redeclare them.
 
         This is automatically set from mix.nix's inputs and merged with consumer
@@ -296,22 +375,21 @@ in
   config = {
     flake = {
       # Generate nixosConfigurations from host specs
-      nixosConfigurations = lib.hosts.mkHosts {
-        specs = config.mix.hosts;
-        users = config.mix.users;
-        secrets = config.mix.secrets.loaded or { };
-        # Use merged inputs: mix.nix's inputs + consumer's inputs (consumer wins)
-        inputs = mergedInputs;
-        inherit (config.mix)
-          hostsDir
-          hostsHomeDir
-          usersHomeDir
-          coreModules
-          coreHomeModules
-          homeManager
-          specialArgs
-          ;
-      };
+      nixosConfigurations = checkMinimal (lib.hosts.mkHosts (
+        {
+          specs = config.mix.hosts;
+          users = config.mix.users;
+          secrets = config.mix.secrets.loaded or { };
+          # Use merged inputs: mix.nix's inputs + consumer's inputs (consumer wins)
+          inputs = mergedInputs;
+          inherit (config.mix)
+            homeManager
+            specialArgs
+            apiVersion
+            ;
+        }
+        // explicitVersionOnly
+      ));
     };
   };
 }

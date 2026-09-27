@@ -1,209 +1,210 @@
-<h1> 
-  <picture>
-    <source srcset="https://fonts.gstatic.com/s/e/notoemoji/latest/2744_fe0f/512.webp" type="image/webp">
-    <img src="https://fonts.gstatic.com/s/e/notoemoji/latest/2744_fe0f/512.gif" alt="❄" width="32" height="32">
-  </picture>
-  mix.nix  
-</h1>
+# mix.nix <picture><source srcset="https://fonts.gstatic.com/s/e/notoemoji/latest/2744_fe0f/512.webp" type="image/webp"><img src="https://fonts.gstatic.com/s/e/notoemoji/latest/2744_fe0f/512.gif" alt="❄" width="32" height="32" align="top"></picture>
 
-> A NixOS library for declarative host management, theming, and desktop configuration
-> 
+> **A convention-driven NixOS and Home Manager framework for multi-host flakes.**
+>
 > [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/TophC7/mix.nix)
 
-## Table of Contents
+**mix.nix follows a folder layout to create NixOS hosts.** You declare users and hosts in a few lines of Nix. Everything else is decided by *where a file lives*: which config belongs to which host, which Home Manager config belongs to which user, and how a feature splits between NixOS and Home Manager.
 
-- [Overview](#overview)
-- [Quick Start](#quick-start)
-- [Installation](#installation)
-- [Home Manager Modules](#home-manager-modules)
-  - [theme](#theme)
-  - [monitors](#monitors)
-  - [fastfetch](#fastfetch)
-  - [nautilus](#nautilus)
-- [NixOS Modules](#nixos-modules)
-  - [newt](#newt)
-  - [olm](#olm)
-  - [oci-stacks](#oci-stacks)
-- [Flake-Parts Modules](#flake-parts-modules)
-  - [hosts](#hosts)
-  - [secrets](#secrets)
-  - [modules](#modules)
-  - [overlays](#overlays)
-  - [packages](#packages)
-  - [devshell](#devshell)
-- [Library Reference](#library-reference)
-- [Real-World Example](#real-world-example)
-- [Design Philosophy](#design-philosophy)
-- [Contributing](#contributing)
+That is the idea behind mix, and it's why this README starts with the layout. Once you understand the paths below, nothing mix.nix does should surprise you. For a real configuration built this way, see my own at [tophc7/dot.nix](https://github.com/tophc7/dot.nix).
 
----
+mix.nix also ships standalone modules (wallpaper theming, monitors, Pangolin tunnels, OCI stacks) and a `lib` of helpers. Those work without the host framework.
 
-## Overview
+> This describes configuration **API v2** (`mix.apiVersion = 2`). The default, deprecated v1 is covered under [API versions](#api-versions).
 
-**mix.nix** is a library of Nix utilities designed to simplify NixOS and Home Manager configurations. It provides reusable patterns, type definitions, and builder functions that reduce boilerplate and enforce consistency across flake-based configurations.
+## The layout
 
-The library offers:
-- **Declarative host/user management** - Define users once, reference them across multiple hosts, auto-generate `nixosConfigurations`
-- **Wallpaper-based theming** - Generate Material You color schemes from your wallpaper using matugen
-- **Multi-monitor configuration** - Declare monitor layouts once, use everywhere
-- **Git-crypt secrets integration** - Load encrypted secrets with validation to prevent accidental plaintext commits
-- **Directory auto-discovery** - Drop files in directories, they're automatically imported
+```
+flake.nix                      imports mix-nix.flakeModules.default and ./mix
+mix/default.nix                mix = { apiVersion = 2; users = …; hosts = …; }
+hosts/
+├── desktop/
+│   ├── default.nix            NixOS for host "desktop"
+│   ├── hardware.nix           anything else is yours to import
+│   └── home/default.nix       Home Manager for desktop's user   (or home.nix)
+└── homelab.nix                a single-file host: NixOS only
+modules/
+├── core/
+│   ├── default.nix            NixOS for every host              (or modules/core.nix)
+│   └── home/default.nix       Home Manager shared on every host (or home.nix)
+├── users/
+│   └── toph/default.nix       toph's Home Manager profile       (or toph.nix)
+└── features/
+    └── gaming/
+        ├── nixos.nix          NixOS half
+        └── home.nix           Home Manager half
+```
 
-mix.nix is consumed by other flakes via `inputs.mix-nix` and extends `nixpkgs.lib` with custom utilities.
+| Path | Used when | Goes into |
+| --- | --- | --- |
+| `hosts/<host>/` or `hosts/<host>.nix` | `<host>` is declared in `mix.hosts` | that host's NixOS config |
+| `hosts/<host>/home/` or `home.nix` | the host is a directory and its user is enrolled | the enrolled user's Home Manager, after the profile |
+| `modules/core/` or `modules/core.nix` | always | every host's NixOS config |
+| `modules/core/home/` or `home.nix` | core is a directory and Home Manager is available | `home-manager.sharedModules` on every host |
+| `modules/users/<user>/` or `<user>.nix` | a host uses `<user>` | enrolls the user as `home-manager.users.<user>` |
+| `modules/features/<name>/` | a NixOS module calls `lib.features [ "<name>" ]` | `nixos.nix` → NixOS, `home.nix` → `home-manager.sharedModules` |
 
----
+A few rules follow from the table:
 
-## Quick Start
+- **Paths are fixed.** They are relative to your flake root (`inputs.self`), and there are no options to move them. The one folder mix.nix does not read is `mix/`: it's where your `mix = { … }` config conventionally lives, and `flake.nix` imports it.
+- **Nothing is required.** A missing path just means nothing is found: a host without `hosts/<host>` still gets core, and a user without a profile gets no Home Manager.
+- **A folder means its `default.nix`.** Hosts, user profiles and core may also be a single `<name>.nix` file where a folder would be ceremony; if both exist, the folder wins. Only folders can hold a `home` part.
+- **mix.nix imports entrypoints, not trees.** It imports `default.nix` (or the single file); whatever else that file imports is up to you.
+
+## What happens when a host is built
+
+For `mix.hosts.desktop = { user = "toph"; }`:
+
+```
+nixosConfigurations.desktop
+├── NixOS
+│   ├── modules/core                      every host
+│   ├── hosts/desktop                     this host
+│   │   └── lib.features [ "gaming" ]  →  modules/features/gaming/nixos.nix
+│   └── from mix.nix: hostname, users.users.toph, secrets, mix.nix's overlay
+└── Home Manager (when the home-manager input exists)
+    ├── sharedModules: modules/core/home, modules/features/gaming/home.nix
+    └── users.toph (only if modules/users/toph exists)
+        ├── secrets module
+        ├── modules/users/toph
+        └── hosts/desktop/home
+```
+
+Home Manager has two separate switches:
+
+- **Integration** loads on every host whenever `mix.homeManager` is set (it defaults to `inputs.home-manager`), so core and features can always contribute shared modules.
+- **Enrollment** creates `home-manager.users.<user>` only when that user's profile exists. An empty `{ }` profile is enough to enroll with just the shared modules.
+
+### Module arguments
+
+Every NixOS and Home Manager module of a mix.nix host receives:
+
+- `host`: the host's spec, with `host.user` resolved to the full user spec (plus `homeDirectory`; in Home Manager, `shell` is resolved to a package)
+- `hosts`: every host spec, for cross-host lookups such as VPN peers
+- `inputs`: your flake inputs, merged over mix.nix's own
+- `secrets`: values loaded through [`mix.secrets`](#secrets) (empty when unused)
+- anything in `mix.specialArgs` or `mix.hosts.<host>.specialArgs`
+
+`lib` is mix.nix's extended lib (`lib.fs`, `lib.desktop`, …). In NixOS modules of v2 hosts it also has [`lib.features`](#libfeatures---feature-directories).
 
 ```nix
+# hosts/desktop/default.nix
+{ host, lib, ... }:
 {
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    mix-nix.url = "github:tophc7/mix.nix";
-    # mix-nix follows nixpkgs automatically
-  };
-
-  outputs = { nixpkgs, mix-nix, ... }: {
-    # Import a Home Manager module directly
-    homeConfigurations.myuser = home-manager.lib.homeManagerConfiguration {
-      # ...
-      modules = [
-        mix-nix.homeManagerModules.theme
-        {
-          theme = {
-            enable = true;
-            image = ./wallpaper.jpg;
-            base16.generate = true;  # Generate colors from wallpaper
-          };
-        }
-      ];
-    };
-  };
+  imports = [ ./hardware.nix ] ++ lib.features [ "gaming" ];
+  users.users.${host.user.name}.extraGroups = [ "gamemode" ];
 }
 ```
 
-See [Installation](#installation) for full setup with flake-parts.
-
----
-
-## Installation
-
-### With Flakes + flake-parts (Recommended)
+## Quick start
 
 ```nix
+# flake.nix
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
-    home-manager.url = "github:nix-community/home-manager";
-
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     mix-nix = {
       url = "github:tophc7/mix.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = inputs@{ flake-parts, mix-nix, ... }:
-    flake-parts.lib.mkFlake {
-      inherit inputs;
-      specialArgs = { lib = mix-nix.lib; };
-    } {
-      imports = [ mix-nix.flakeModules.default ];
-
-      # Or import selectively:
-      # imports = [
-      #   mix-nix.flakeModules.hosts
-      #   mix-nix.flakeModules.secrets
-      #   mix-nix.flakeModules.modules
-      # ];
-
-      systems = [ "x86_64-linux" "aarch64-linux" ];
-
-      mix = {
-        # Your host and user configurations...
+  outputs =
+    inputs@{ flake-parts, mix-nix, ... }:
+    flake-parts.lib.mkFlake
+      {
+        inherit inputs;
+        specialArgs = { lib = mix-nix.lib; };
+      }
+      {
+        imports = [
+          mix-nix.flakeModules.default
+          ./mix
+        ];
+        systems = [ "x86_64-linux" ];
       };
-    };
 }
 ```
 
-> **Why `specialArgs`?** The extended `lib` (with `lib.hosts`, `lib.secrets`, etc.) must be passed via `specialArgs` so flake-parts modules can access it. `specialArgs` has highest priority and cannot be shadowed.
-
-### With Flakes (without flake-parts)
-
-Use `lib.mkFlake` for the same declarative host management without flake-parts:
-
 ```nix
+# mix/default.nix
 {
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    home-manager.url = "github:nix-community/home-manager";
+  mix = {
+    apiVersion = 2;
 
-    mix-nix = {
-      url = "github:tophc7/mix.nix";
-      inputs.nixpkgs.follows = "nixpkgs";
+    users.toph = {
+      name = "toph";
+      shell = "fish";
     };
-  };
 
-  outputs = { nixpkgs, mix-nix, home-manager, ... }@inputs:
-    mix-nix.lib.mkFlake {
-      inherit inputs;
-      homeManager = home-manager;
-
-      coreModules = [ ./modules/core ];
-      coreHomeModules = [
-        ./home/core
-        mix-nix.homeManagerModules.theme
-        mix-nix.homeManagerModules.monitors
-      ];
-
-      hostsDir = ./hosts;
-      hostsHomeDir = ./home/hosts;
-
-      # Optional: git-crypt encrypted secrets
-      secrets = {
-        file = ./secrets.nix;
-        gitattributes = ./.gitattributes;
-      };
-
-      users.myuser = {
-        name = "myuser";
-        shell = nixpkgs.legacyPackages.x86_64-linux.fish;
-        home.directory = ./home/users/myuser;
-      };
-
-      hosts.desktop = {
-        user = "myuser";
+    hosts = {
+      desktop.user = "toph";
+      homelab = {
+        user = "toph";
+        isServer = true;
       };
     };
-    # Returns: { nixosConfigurations.desktop = <nixosSystem>; }
-}
-```
-
-### Without Flakes (using getFlake)
-
-For non-flake configurations, use `builtins.getFlake` to access flake outputs:
-
-```nix
-# configuration.nix or home.nix
-let
-  mix-nix = builtins.getFlake "github:tophc7/mix.nix";
-  # Or pin to a specific commit:
-  # mix-nix = builtins.getFlake "github:tophc7/mix.nix/<commit-sha>";
-in
-{
-  imports = [
-    mix-nix.homeManagerModules.theme
-    mix-nix.homeManagerModules.monitors
-  ];
-
-  theme = {
-    enable = true;
-    image = ./wallpaper.jpg;
   };
 }
 ```
 
-> **Note:** Requires `--impure` flag when building. For full host management with `lib.mkFlake`, use a flake-based setup instead.
+Add `hosts/desktop/default.nix` (with its hardware config) and `modules/users/toph/default.nix`, and `nixosConfigurations.desktop` is ready to build. Without flake-parts, [`lib.mkFlake`](#libmkflake---standalone-flake-builder) takes the same `users`/`hosts` and returns `nixosConfigurations`.
+
+## Features
+
+A feature is a folder that can carry both halves of one capability: `nixos.nix` for the system (packages, services, udev rules) and `home.nix` for the user (dotfiles, app settings). Either half is optional.
+
+```
+modules/features/gaming/
+├── nixos.nix     Steam, GameMode
+└── home.nix      MangoHud, launcher settings
+```
+
+Nothing under `modules/features` loads on its own. A NixOS module opts in by name:
+
+```nix
+{ lib, ... }:
+{
+  imports = lib.features [ "gaming" "pangolin/newt" ./local-feature ];
+}
+```
+
+`nixos.nix` is imported into NixOS, and `home.nix` is added to `home-manager.sharedModules` by path, so Home Manager evaluates it in its own context. On a flake without Home Manager (`mix.homeManager = null`), `home.nix` is ignored, like every other Home Manager part. Names may be nested (`"pangolin/newt"`), and a path loads a feature folder from anywhere.
+
+## Worth knowing
+
+- **NixOS and Home Manager are separate evaluations.** A folder that mixes them (a host folder, a core folder, a feature) must never be imported wholesale. `lib.fs.scanPaths ./.` in `hosts/desktop/default.nix` would feed `home/` to NixOS, which usually fails with *"The option `home' does not exist"*. `scanPaths` warns when the folder it scans contains `home/` or `home.nix`. Scan single-context subfolders instead, such as `lib.fs.scanPaths ./config`.
+- **Host Home Manager belongs to the host's user.** `hosts/<host>/home` is imported only for `host.user`, and only if that user is enrolled.
+- **Profiles are personal; core and features are shared.** `modules/users/<user>` applies to that user alone. Anything several users or hosts need belongs in `modules/core` or a feature.
+
+## Building on another flake
+
+A second flake, such as installer ISOs, can reuse an existing layout instead of copying it:
+
+```nix
+# iso/mix/default.nix
+{ dotRoot, ... }:
+{
+  mix = {
+    apiVersion = 2;
+    extends = dotRoot;   # e.g. ../. passed in through specialArgs
+    hostSpecExtensions = [ (dotRoot + "/mix/hostSpec.nix") ];
+    # users, hosts, secrets …
+  };
+}
+```
+
+- Hosts, user profiles and features are looked up in this flake first, then in the extended one.
+- The extended flake's `modules/core` applies first, then this flake's own `modules/core`, so the ISO can add its installer settings on top.
+- It is one level deep: the extended flake's own `extends` is not followed.
+- `hostSpecExtensions` and `secrets` are not inherited; set them where you need them.
+
+[tophc7/dot.nix](https://github.com/tophc7/dot.nix)'s `dist/` builds its ISOs this way.
 
 ---
 
@@ -721,11 +722,11 @@ imports = [ inputs.mix-nix.flakeModules.default ];
 Or import selectively via `imports = [ inputs.mix-nix.flakeModules.<name> ]`.
 
 <details>
-<summary><strong>hosts</strong> - Declarative host and user management</summary>
+<summary><strong>hosts</strong> - Users, hosts and the <code>mix.*</code> options</summary>
 
 ### hosts
 
-The primary integration point. Define users once, reference them across hosts, and automatically generate `nixosConfigurations`.
+Declares users and hosts and generates `nixosConfigurations` from them, following [the layout](#the-layout).
 
 #### User Options (`mix.users`)
 
@@ -738,8 +739,6 @@ The primary integration point. Define users once, reference them across hosts, a
 | `mix.users.<name>.shell`       | `package` \| `string` | required                      | Default shell (package or name like `"fish"`) |
 | `mix.users.<name>.extraGroups` | `listOf string`       | `["wheel", "networkmanager"]` | Additional groups                             |
 
-> **Note:** Home Manager is auto-enabled via `usersHomeDir` discovery. If `<usersHomeDir>/<username>/` or `<usersHomeDir>/<username>.nix` exists, HM is enabled for that user.
-
 #### Host Options (`mix.hosts`)
 
 | Option                         | Type               | Default          | Description                                    |
@@ -749,214 +748,42 @@ The primary integration point. Define users once, reference them across hosts, a
 | `mix.hosts.<name>.hostName`    | `string`           | attr name        | Hostname                                       |
 | `mix.hosts.<name>.system`      | `enum`             | `"x86_64-linux"` | Architecture (`x86_64-linux`, `aarch64-linux`) |
 | `mix.hosts.<name>.user`        | `string`           | required         | Username from `mix.users`                      |
-| `mix.hosts.<name>.isServer`    | `bool`             | `false`          | Server mode (affects extension defaults)       |
-| `mix.hosts.<name>.isMinimal`   | `bool`             | `false`          | Skip user/host HM directories                  |
-| `mix.hosts.<name>.specialArgs` | `attrs`            | `{}`             | Extra specialArgs for nixosSystem              |
+| `mix.hosts.<name>.isServer`    | `bool`             | `false`          | Server flag, readable as `host.isServer`       |
+| `mix.hosts.<name>.isMinimal`   | `bool`             | `false`          | **v1 only**: HM user gets only secrets + `coreHomeModules`. v2 has no such flag: setting it is an error unless you declare your own with `mix.hostSpecExtensions` |
+| `mix.hosts.<name>.specialArgs` | `attrs`            | `{}`             | Extra specialArgs for this host                |
 
-> **Desktop Configuration:** For desktop environment and greeter options (DE type, auto-login, etc.), use the [arroz.nix](https://github.com/toph/arroz.nix) extension which adds these via `mix.hostSpecExtensions`.
+#### Other Options
 
-#### Core Modules Options
+| Option                   | Type                    | Default                | Description |
+| ------------------------ | ----------------------- | ---------------------- | ----------- |
+| `mix.apiVersion`         | `int` (1 or 2)          | `1`                    | Configuration API; see [API versions](#api-versions) |
+| `mix.extends`            | `null` \| `path`         | `null`                 | v2 only: layout root to fall back to; see [Building on another flake](#building-on-another-flake) |
+| `mix.hostSpecExtensions` | `listOf deferredModule` | `[]`                   | Modules adding options to every host spec |
+| `mix.userSpecExtensions` | `listOf deferredModule` | `[]`                   | Modules adding options to every user spec |
+| `mix.homeManager`        | `null` \| `attrs`        | `inputs.home-manager`  | Home Manager input; `null` disables Home Manager (profiles, host/core `home`, and feature `home.nix` are all ignored) |
+| `mix.specialArgs`        | `attrs`                 | `{}`                   | Extra arguments for every host's NixOS and Home Manager modules |
 
-| Option                | Type                    | Default | Description                                     |
-| --------------------- | ----------------------- | ------- | ----------------------------------------------- |
-| `mix.coreModules`     | `listOf deferredModule` | `[]`    | NixOS modules applied to ALL hosts              |
-| `mix.coreHomeModules` | `listOf deferredModule` | `[]`    | HM modules applied to ALL users with HM enabled |
+#### Extending host and user specs
 
-#### Directory Auto-Discovery
-
-| Option             | Type             | Default | Description                                                 |
-| ------------------ | ---------------- | ------- | ----------------------------------------------------------- |
-| `mix.hostsDir`     | `null` \| `path` | `null`  | Auto-discover NixOS configs from `<hostsDir>/<hostname>/`   |
-| `mix.hostsHomeDir` | `null` \| `path` | `null`  | Auto-discover HM configs from `<hostsHomeDir>/<hostname>/`  |
-| `mix.usersHomeDir` | `null` \| `path` | `null`  | Auto-discover user HM configs from `<usersHomeDir>/<user>/` |
-
-> **Note:** Home Manager is automatically enabled for a user when their home config path exists (either via `usersHomeDir` auto-discovery or explicit `home.directory`).
-
-#### Flat File Support
-
-Auto-discovery supports **both directory and flat file** layouts:
-
-```
-# Directory style (recommended for complex configs)
-hosts/desktop/default.nix     →  imported as ./hosts/desktop
-home/users/toph/default.nix   →  imported as ./home/users/toph
-
-# Flat file style (simpler for small configs)
-hosts/desktop.nix             →  imported directly
-home/users/toph.nix           →  imported directly
-```
-
-The lookup order is: directory first, then flat file.
-
-#### How Module Import Works
-
-**Important:** mix.nix only imports the `default.nix` from each directory path you provide. It does NOT recursively scan or auto-import sibling files.
-
-For example, with this configuration:
-```nix
-mix = {
-  coreModules = [ ./modules/core ];    # Imports ./modules/core/default.nix
-  coreHomeModules = [ ./home/core ];   # Imports ./home/core/default.nix
-  hostsDir = ./hosts;                  # Imports ./hosts/<hostname>/ or ./hosts/<hostname>.nix
-  hostsHomeDir = ./home/hosts;         # Imports ./home/hosts/<hostname>/ or .nix
-  usersHomeDir = ./home/users;         # Imports ./home/users/<username>/ or .nix (enables HM)
-};
-```
-
-**Each `default.nix` controls what gets imported from its directory.** This gives you full control over your module structure.
-
-##### Using `lib.scanPaths` (Optional)
-
-If you want automatic sibling import, use `lib.scanPaths` in your `default.nix`:
+Extensions add your own fields to every host or user, readable in modules as `host.<field>`:
 
 ```nix
-# modules/core/default.nix
-{ lib, ... }:
-{
-  imports = lib.scanPaths ./.;  # Auto-imports all .nix files and directories with default.nix
-}
-```
+mix.hostSpecExtensions = [
+  ({ lib, ... }: {
+    options.desktop = lib.mkOption {
+      type = lib.types.nullOr (lib.types.enum [ "gnome" "niri" ]);
+      default = null;
+    };
+  })
+];
 
-`lib.scanPaths` returns paths to:
-- All `.nix` files (except `default.nix` itself)
-- All directories (Nix will look for their `default.nix`)
-- **Excludes** entries starting with `_` (e.g., `_helpers.nix`, `_internal/`)
-
-##### ⚠️ Pitfall: Non-Module Directories
-
-`lib.scanPaths` includes ALL directories, so directories without a `default.nix` will cause import failures:
-
-```
-home/hosts/gojo/
-├── default.nix      # Entry point
-├── theme.nix        # ✅ Imported as file
-├── config/          # ✅ Imported if config/default.nix exists
-│   └── default.nix
-└── wallpapers/      # ❌ FAILS - no default.nix!
-    └── mountain.png
-```
-
-**Solutions:**
-
-1. **Keep assets outside scanned directories:**
-   ```
-   home/hosts/gojo/
-   ├── default.nix
-   ├── theme.nix
-   └── wallpaper.png   # Reference directly: ./wallpaper.png
-   ```
-
-2. **Don't use `scanPaths` - import explicitly:**
-   ```nix
-   # default.nix
-   { ... }:
-   {
-     imports = [
-       ./theme.nix
-       ./programs.nix
-       # Don't import ./wallpapers - it's just assets
-     ];
-   }
-   ```
-
-3. **Use a dedicated assets path referenced in your config:**
-   ```nix
-   # theme.nix
-   { ... }:
-   {
-     theme.image = ./assets/wallpaper.png;  # Direct path, not imported
-   }
-   ```
-
-#### Type Extensions
-
-Extend the host and user specification types by adding modules to the extension lists. This allows multiple flakes (e.g., arroz.nix, play.nix) to compose additional options without conflicts.
-
-| Option                   | Type                    | Default | Description                                   |
-| ------------------------ | ----------------------- | ------- | --------------------------------------------- |
-| `mix.hostSpecExtensions` | `listOf deferredModule` | `[]`    | Modules to add options to hostSpec type       |
-| `mix.userSpecExtensions` | `listOf deferredModule` | `[]`    | Modules to add options to userSpec type       |
-| `mix.homeManager`        | `null` \| `attrs`       | `inputs.home-manager` | Home Manager input              |
-
-**Extension Example (from arroz.nix):**
-```nix
-# arroz.nix/parts/hosts.nix
-{ config, ... }: {
-  config.mix.hostSpecExtensions = [
-    ({ lib, ... }: {
-      options.desktop.niri.enable = lib.mkEnableOption "Niri compositor";
-      options.greeter.type = lib.mkOption {
-        type = lib.types.str;
-        default = "tuigreet";
-      };
-    })
-  ];
-}
-```
-
-Then consumers can use these extended options:
-```nix
 mix.hosts.desktop = {
   user = "toph";
-  desktop.niri.enable = true;  # From arroz.nix extension
-  greeter.type = "regreet";    # From arroz.nix extension
+  desktop = "niri";
 };
 ```
 
-#### SpecialArgs Available in Modules
-
-When using `mix.hosts`, these are available in your NixOS and Home Manager modules:
-
-- `host` - The full resolved host spec with user data merged in
-- `secrets` - Loaded secrets (if using `mix.secrets`)
-
-#### Usage Example
-
-```nix
-{
-  imports = [ inputs.mix-nix.flakeModules.hosts ];
-
-  mix = {
-    coreModules = [ ./modules/core ];
-    coreHomeModules = [ ./home/core ];
-
-    hostsDir = ./hosts;
-    hostsHomeDir = ./home/hosts;
-
-    # Auto-discover user HM configs from ./home/users/<username>/
-    usersHomeDir = ./home/users;
-
-    users = {
-      toph = {
-        name = "toph";
-        uid = 1000;
-        shell = pkgs.fish;
-        # HM enabled via usersHomeDir auto-discovery (./home/users/toph/)
-      };
-      admin = {
-        name = "admin";
-        shell = pkgs.bash;
-        # No ./home/users/admin/ = system user only, no Home Manager
-      };
-    };
-
-    hosts = {
-      desktop = {
-        user = "toph";  # References mix.users.toph
-      };
-      server = {
-        user = "admin";
-        isServer = true;
-        system = "aarch64-linux";
-      };
-      laptop = {
-        user = "toph";
-        isMinimal = true;  # Only coreHomeModules, skip user/host dirs
-      };
-    };
-  };
-}
-```
+For a larger example, see `mix/hostSpec.nix` in [tophc7/dot.nix](https://github.com/tophc7/dot.nix).
 
 </details>
 
@@ -1138,7 +965,7 @@ Directory scanning and module auto-discovery.
 
 **Convention:** Files and directories starting with `_` are excluded from all scan/import functions. Use this for private helpers or internal modules (e.g., `_helpers.nix`, `_internal/`).
 
-- `scanPaths path` - Returns paths to all importable modules (directories + .nix, excluding `default.nix` and `_*`)
+- `scanPaths path` - Returns paths to all importable modules (directories + .nix, excluding `default.nix` and `_*`); warns when `path` contains `home/` or `home.nix` (see [Worth knowing](#worth-knowing)). If that `home` entry is meant to be scanned, list imports explicitly instead, or prefix it with `_` to keep it out of the scan
 - `scanNames path` - Returns just filenames (not full paths)
 - `scanAttrs path` - Returns attrset of `{ name = ./path; }` for module indices
 - `importAndMerge path args` - Import all files and merge their attrsets
@@ -1147,22 +974,28 @@ Directory scanning and module auto-discovery.
 
 ### lib.mkFlake - Standalone Flake Builder
 
-For non-flake-parts users. Returns `{ nixosConfigurations = {...}; }`.
+For non-flake-parts users. Returns `{ nixosConfigurations = {...}; }` and follows [the layout](#the-layout) under `inputs.self`.
 
 ```nix
 lib.mkFlake {
-  inputs;                    # Required: flake inputs
+  inputs;                    # Required: flake inputs (including self)
   users;                     # Required: { name = userSpec; }
   hosts;                     # Required: { name = hostSpec; }
+  apiVersion ? 1;            # Set 2 for the layout described here
+  extends ? null;            # v2: layout root to fall back to
   secrets ? {};              # Optional: { file, gitattributes, ... }
-  coreModules ? [];          # Optional: NixOS modules for all hosts
-  coreHomeModules ? [];      # Optional: HM modules for all users
-  hostsDir ? null;           # Optional: auto-discover NixOS configs
-  hostsHomeDir ? null;       # Optional: auto-discover host HM configs
-  usersHomeDir ? null;       # Optional: auto-discover user HM configs
-  homeManager ? null;        # Optional: home-manager input
+  homeManager ? inputs.home-manager or null;
+  # v1 only: coreModules, coreHomeModules, hostsDir, hostsHomeDir, usersHomeDir
 }
 ```
+
+### lib.features - Feature Directories
+
+Available as `lib.features` in NixOS modules of v2 hosts; see [Features](#features).
+
+- String entries name a folder under `modules/features` (local flake first, then `mix.extends`); names may nest (`"pangolin/newt"`).
+- Path entries (or absolute strings) load that folder directly.
+- Each folder must hold `nixos.nix`, `home.nix`, or both; otherwise evaluation fails naming the folder.
 
 ### lib.hosts - Host Management
 
@@ -1173,7 +1006,7 @@ Types and builders for declarative configurations.
 - `modules.baseUserSpec` - Base user module (for submoduleWith imports)
 - `modules.baseHostSpec` - Base host module (for submoduleWith imports)
 - `mkUserSpecType [modules]` - Build userSpec type with extension modules
-- `mkHostSpecType [modules]` - Build hostSpec type with extension modules
+- `mkHostSpecType [modules]` - Build hostSpec type with extension modules (API v1 shape, including `isMinimal`, like `types.hostSpec`)
 - `mkHost {...}` - Build single nixosConfiguration
 - `mkHosts {...}` - Build multiple nixosConfigurations
 
@@ -1266,167 +1099,29 @@ For full container stack orchestration (networks, targets, dependencies), use th
 
 ---
 
-## Real-World Example
+## API versions
 
-Complete flake.nix showing typical usage:
+Omitting `mix.apiVersion` selects **v1**. It keeps existing flakes working unchanged, and every evaluation warns once that it is deprecated. A future release will make omitted/1 an error; it will never silently switch to v2.
 
-```nix
-{
-  description = "My NixOS configuration";
+- **v1 (deprecated):** locations are options (`hostsDir`, `hostsHomeDir`, `usersHomeDir`, `coreModules`, `coreHomeModules`); Home Manager loads only for users with a profile; `isMinimal` trims a host's Home Manager to secrets + `coreHomeModules`. No `lib.features`; `extends` is rejected.
+- **v2:** the fixed [layout](#the-layout). The v1 location options are rejected with an error, even when set to `[]` or `null`.
 
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-25.11";
+### Migrating from v1
 
-    flake-parts.url = "github:hercules-ci/flake-parts";
-    home-manager = {
-      url = "github:nix-community/home-manager";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    mix-nix = {
-      url = "github:tophc7/mix.nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-  };
-
-  outputs = inputs@{ flake-parts, mix-nix, ... }:
-    flake-parts.lib.mkFlake {
-      inherit inputs;
-      specialArgs = { lib = mix-nix.lib; };
-    } ({ pkgs, ... }: {
-      imports = [ mix-nix.flakeModules.default ];
-
-      systems = [ "x86_64-linux" "aarch64-linux" ];
-
-      mix = {
-        # Secrets (git-crypt encrypted)
-        secrets = {
-          file = ./secrets.nix;
-          gitattributes = ./.gitattributes;
-        };
-
-        # Core modules for all hosts
-        coreModules = [
-          ./modules/core
-          ./modules/nix-settings.nix
-        ];
-        coreHomeModules = [
-          ./home/core
-          mix-nix.homeManagerModules.theme
-          mix-nix.homeManagerModules.monitors
-        ];
-
-        # Auto-discovery directories
-        hostsDir = ./hosts;
-        hostsHomeDir = ./home/hosts;
-        usersHomeDir = ./home/users;  # HM enabled if ./home/users/<username>/ exists
-
-        # User definitions
-        users.toph = {
-          name = "toph";
-          uid = 1000;
-          shell = pkgs.fish;
-          extraGroups = [ "wheel" "docker" "audio" "video" ];
-          # HM auto-enabled via usersHomeDir (./home/users/toph/)
-        };
-
-        # Host definitions
-        hosts = {
-          desktop = {
-            user = "toph";
-          };
-          laptop = {
-            user = "toph";
-          };
-          homelab = {
-            user = "toph";
-            isServer = true;
-          };
-        };
-      };
-    });
-}
-```
-
-
-**Directory structure (directories - complex configs):**
-```
-.
-├── flake.nix
-├── secrets.nix               # git-crypt encrypted
-├── .gitattributes            # secrets.nix filter=git-crypt
-├── modules/
-│   ├── home/
-│   │   ├── core/
-│   │   │   └── default.nix   # Core HM modules (applied to all)
-│   │   └── common/
-│   │       └── default.nix   # Optional shared HM modules
-│   └── host/
-│       ├── core/
-│       │   └── default.nix   # Core NixOS modules (applied to all)
-│       └── common/
-│           └── default.nix   # Optional shared NixOS modules
-├── hosts/
-│   ├── desktop/
-│   │   └── default.nix       # NixOS config for 'desktop' host
-│   ├── laptop/
-│   │   └── default.nix
-│   └── homelab/
-│       └── default.nix
-└── home/
-    ├── users/
-    │   └── toph/
-    │       └── default.nix   # User-specific HM config (enables HM)
-    └── hosts/
-        ├── desktop/
-        │   └── default.nix   # Host-specific HM config
-        ├── laptop/
-        │   └── default.nix
-        └── homelab/
-            └── default.nix
-```
-
-**Directory structure (flat files - simpler):**
-```
-.
-├── flake.nix
-├── secrets.nix           # git-crypt encrypted
-├── home/
-│   ├── core.nix          # Core HM modules
-│   ├── hosts/
-│   │   ├── desktop.nix   # Host-specific HM config
-│   │   └── server.nix
-│   └── users/
-│       └── toph.nix      # User-specific HM config (enables HM)
-├── hosts/
-│   ├── desktop.nix       # NixOS config for desktop
-│   └── server.nix        # NixOS config for server
-└── modules/
-    ├── core.nix          # Core NixOS modules
-    └── secrets.nix       # git-crypt encrypted
-```
+| v1 | v2 |
+| --- | --- |
+| `apiVersion` omitted | `mix.apiVersion = 2;` |
+| `hostsDir = ./hosts;` | Remove. Host configs live at `hosts/<host>/` or `hosts/<host>.nix` in the flake root. |
+| `hostsHomeDir = ./home/hosts;` | Remove. Move `home/hosts/<host>/` to `hosts/<host>/home/`; a single-file host must become `hosts/<host>/default.nix` first. |
+| `usersHomeDir = ./home/users;` | Remove. Move profiles to `modules/users/<user>/` (or `<user>.nix`). |
+| `coreModules = [ ./modules/core … ];` | Remove. `modules/core/` (or `modules/core.nix`) is imported on every host; import any other always-on modules from it. |
+| `coreHomeModules = [ ./home/core ];` | Remove. Move it to `modules/core/home/` (or `modules/core/home.nix`). |
+| `home-manager.sharedModules = [ ./home ]` next to a NixOS module | Make it a feature, `modules/features/<name>/{nixos.nix,home.nix}`, and load it with `lib.features [ "<name>" ]`. |
+| `isMinimal = true` trimming Home Manager | v2 has no `isMinimal`; setting it without declaring it is an error. If you want the flag, add it with `mix.hostSpecExtensions` and gate with `lib.mkIf (!host.isMinimal)` where it matters. |
+| Another flake's paths in `coreModules` | `mix.extends = <that flake's root>;` |
 
 ---
 
-## Design Philosophy
-
-1. **Directory Auto-Discovery Over Explicit Lists**
-   Drop files in directories - they're automatically imported. No manual `imports = [ ./a.nix ./b.nix ]`.
-
-2. **Declarative Specs Describe "What", Not "How"**
-   Specifications define properties and identity. Implementation details live in directories.
-
-3. **Convention Over Configuration**
-   Consistent directory structures reduce cognitive load. Follow established patterns.
-
-4. **Extensibility Via Composable Extensions**
-   Base types stay minimal. Use `mix.hostSpecExtensions`/`mix.userSpecExtensions` to add custom options from multiple flakes.
-
-5. **Tools Over Configs**
-   While some modules (like fastfetch) include opinionated defaults, the focus is on providing reusable tools and specifications rather than full system configurations.
-
----
 
 ## Contributing
 
