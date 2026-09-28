@@ -888,6 +888,7 @@ Custom packages built by mix.nix.
 | Package                | Description                                           |
 | ---------------------- | ----------------------------------------------------- |
 | `eden`                 | Nintendo Switch video game console emulator           |
+| `eden-bin`             | Eden from the official prebuilt AppImage (no compile) |
 | `eightbitdo-updater`   | 8BitDo controller firmware updater                    |
 | `gamescope-git`        | Gamescope compositor (git version)                    |
 | `gamescope-git.wsi`    | Gamescope WSI layer only (git version)                |
