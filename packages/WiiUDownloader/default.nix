@@ -4,10 +4,11 @@ let
     buildGoModule
     fetchFromGitHub
     pkg-config
-    gtk3
+    gtk4
+    libadwaita
     libgcrypt
     librsvg
-    wrapGAppsHook3
+    wrapGAppsHook4
     ;
 
   # db.go file that would normally be downloaded by grabTitles.py
@@ -17,25 +18,27 @@ let
 in
 buildGoModule rec {
   pname = "WiiUDownloader";
-  version = "2.98";
+  version = "3.2";
 
   src = fetchFromGitHub {
     owner = "Xpl0itU";
     repo = "WiiUDownloader";
     rev = "v${version}";
-    hash = "sha256-vLbf0tHumqBetqIoqQ/+foV6HA6b/8GqH2BwOaLVkRA=";
+    hash = "sha256-mCiYRoEwWtDQwQy9gFOAlcnsMyB4I1jW5h6NIIRLjGg=";
   };
 
   modRoot = "cmd/WiiUDownloader";
-  vendorHash = "sha256-sr6p41U+OQd3uWVRM2g0vQel7vNG1rzddJ2Q/57TTls=";
+  vendorHash = "sha256-V75zyp1SoUiI0Uk+CcxVC90A3wLT7NfK1Y6UDCkH4rc=";
 
   nativeBuildInputs = [
     pkg-config
-    wrapGAppsHook3
+    wrapGAppsHook4
+    pkgs.gobject-introspection
   ];
 
   buildInputs = [
-    gtk3
+    gtk4
+    libadwaita
     libgcrypt
     librsvg
   ];

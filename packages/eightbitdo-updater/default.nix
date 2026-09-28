@@ -4,8 +4,8 @@ let
 
   # 8BitDo Ultimate Software
   updaterZip = fetchurl {
-    url = "https://support.8bitdo.com/bd-uploads/files/ultimate_soft/8BitDo_Ultimate_Software_V2_Windows_V1.34.zip";
-    sha256 = "sha256-yZ4OEwPHc8mwJgKpvLXNSQ1pKGMoK67dBv0toOvVuQA=";
+    url = "https://support.8bitdo.com/bd-uploads/files/ultimate_soft/8BitDo_Ultimate_Software_V2_Windows_V1.35.zip";
+    sha256 = "sha256-7dFlacZvUmo6kOrr5uuN3rxULs30e2StQX6pGZEL2Rk=";
   };
 
   # Extract the updater from the ZIP
@@ -19,7 +19,7 @@ let
     installPhase = ''
       mkdir -p $out
       # Copy ALL files from the extracted subdirectory (exe needs its DLLs and configs)
-      cp -r 8BitDo_Ultimate_Software_V2_Windows_V1.34/* $out/
+      cp -r 8BitDo_Ultimate_Software_V2_Windows_V1.35/* $out/
     '';
   };
 in

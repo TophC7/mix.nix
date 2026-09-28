@@ -79,17 +79,16 @@ let
 in
 stdenvNoCC.mkDerivation {
   pname = "switch2-controllers";
-  version = "0-unstable-2026-08-01";
+  version = "0-unstable-2026-09-01";
 
   src = fetchFromGitHub {
     owner = "trevlars";
     repo = "switch2-controllers-linux";
-    rev = "bdec56a65f00c3222313fe10d90d4622c84886c2";
-    hash = "sha256-8FBf4EBFeibLxx7ltbtpECo59zP+NgqGqReuxC2Uowk=";
+    rev = "a0a36e6b88ed5500f60cac29815aabad0d8956bd";
+    hash = "sha256-/ZEtlVfd6VqI8k74LT70EkjDOhXWvPPNpQG2FiCmS3o=";
   };
 
   patches = [
-    ./detect-adapter.patch
     ./clean-exit-on-hub-crash.patch
   ];
 

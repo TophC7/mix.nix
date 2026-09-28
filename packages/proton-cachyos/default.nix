@@ -5,7 +5,8 @@
 #   pkgs.proton-cachyos.v3   - x86-64-v3 (AVX2)
 #
 # Usage:
-#   Add to Steam's compatibility tools directory or use with programs.steam
+#   Add to programs.steam.extraCompatPackages. The tool lives in the
+#   `steamcompattool` output (nixpkgs convention, same as proton-ge-bin).
 #
 { lib, pkgs, ... }:
 let
@@ -32,13 +33,21 @@ let
         inherit (versions) hash;
       };
 
+      outputs = [
+        "out"
+        "steamcompattool"
+      ];
+
       buildCommand = ''
-        mkdir -p $out/bin
-        tar -C $out/bin --strip=1 -x -f $src
+        # Match nixpkgs proton-ge-bin: `out` is a breadcrumb, not an installable tool
+        echo "$pname belongs in programs.steam.extraCompatPackages, not an environment." > $out
+
+        mkdir -p $steamcompattool
+        tar -C $steamcompattool --strip=1 -x -f $src
 
         # Set consistent display name in Steam
-        sed -i -r 's|"proton-cachyos-[^"]*"|"${displayTitle}"|g' $out/bin/compatibilitytool.vdf
-        sed -i -r 's|"display_name"[[:space:]]*"[^"]*"|"display_name" "${displayTitle}"|' $out/bin/compatibilitytool.vdf
+        sed -i -r 's|"proton-cachyos-[^"]*"|"${displayTitle}"|g' $steamcompattool/compatibilitytool.vdf
+        sed -i -r 's|"display_name"[[:space:]]*"[^"]*"|"display_name" "${displayTitle}"|' $steamcompattool/compatibilitytool.vdf
       '';
 
       meta = with lib; {
