@@ -1,0 +1,10 @@
+{
+  "tag": "release-11-7",
+  "asset": "GDK-Proton11-7-x86_64.tar.gz",
+  "hash": "sha256-FhDaL52KtoOUBxyEZbnf2cpWrk865sgbaryr+Gt7dtU=",
+  "xgameruntime": {
+    "offset": 7451,
+    "originalHash": "ac32e6158c45c8a5999e740f1e05489aca9ff204e8d84293682a045c8dedb09f",
+    "patchedHash": "3155ec5b5c7894f19f7dd73fc71688aa727b65d4b02c3a0b147d8684dd8d22dd"
+  }
+}
