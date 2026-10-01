@@ -11,8 +11,9 @@
 # - ThinLTO for performance
 # - Full preemption for container responsiveness
 #
-# IMPORTANT: Use zfs_cachyos module for kernel compatibility:
-#   boot.zfs.package = config.boot.kernelPackages.zfs_cachyos;
+# IMPORTANT: Use the CachyOS-patched ZFS userspace; NixOS then loads the
+# matching module from kernelPackages.zfs_cachyos:
+#   boot.zfs.package = pkgs.zfs_cachyos;
 {
   lib,
   final,
@@ -53,19 +54,30 @@ let
     autoModules = true;
   };
 
-  # Apply LLVM fixes and include CachyOS-patched ZFS module.
-  # callPackage the upstream zfs-cachyos source directly so `self.kernel` is
-  # auto-injected. Pin its concrete metadata key; upstream no longer provides
-  # the old "latest" default. Keep its nixpkgs pinned for patch compatibility.
+  # The kernel set builds with nix-cachyos-kernel's pinned LLVM stdenv (its own
+  # glibc), while dependencies like curl come from our nixpkgs. Userspace built
+  # there links two glibcs and zpool dies at load once they diverge, so split
+  # like nixpkgs' zfs_2_4: module from the kernel stdenv, userspace from ours.
+  # zfs-cachyos only forwards `kernel` to zfs/generic.nix, so `configFile` is
+  # injected through the callPackage it receives.
+  mkZfsCachyos =
+    callPackage: configFile:
+    callPackage "${inputs.nix-cachyos-kernel}/zfs-cachyos" {
+      callPackage = fn: args: callPackage fn (args // { inherit configFile; });
+      inputs = { inherit (inputs.nix-cachyos-kernel.inputs) nixpkgs; };
+      variant = "linux-cachyos";
+    };
+
+  # Apply LLVM fixes and include the CachyOS-patched ZFS module. `self.kernel`
+  # is auto-injected; keep upstream's nixpkgs pinned for patch compatibility.
   packages = (helpers.kernelModuleLLVMOverride (final.linuxKernel.packagesFor kernel)).extend (
     self: _super: {
-      zfs_cachyos = self.callPackage "${inputs.nix-cachyos-kernel}/zfs-cachyos" {
-        inputs = { inherit (inputs.nix-cachyos-kernel.inputs) nixpkgs; };
-        variant = "linux-cachyos";
-      };
+      zfs_cachyos = mkZfsCachyos self.callPackage "kernel";
     }
   );
+
+  zfsUserspace = mkZfsCachyos final.callPackage "user";
 in
 {
-  inherit kernel packages;
+  inherit kernel packages zfsUserspace;
 }

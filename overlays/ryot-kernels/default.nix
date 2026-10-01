@@ -2,7 +2,7 @@
 #
 # Provides optimized kernel configurations for different workloads:
 # - linuxPackages-ryot:     Desktop/gaming (low latency, ThinLTO)
-# - linuxPackages-ryot-zfs: ZFS servers (balanced, includes zfs_cachyos)
+# - linuxPackages-ryot-zfs: ZFS servers (balanced, includes zfs_cachyos module)
 # - linuxPackages-ryot-net: Routers/network appliances (throughput-focused)
 #
 # Usage:
@@ -10,7 +10,7 @@
 #
 # For ZFS hosts:
 #   boot.kernelPackages = pkgs.linuxPackages-ryot-zfs;
-#   boot.zfs.package = config.boot.kernelPackages.zfs_cachyos;
+#   boot.zfs.package = pkgs.zfs_cachyos;
 {
   lib,
   final,
@@ -67,6 +67,7 @@ in
   # ZFS Servers
   linux-ryot-zfs = kernelRyotZfs.kernel;
   linuxPackages-ryot-zfs = kernelRyotZfs.packages;
+  zfs_cachyos = kernelRyotZfs.zfsUserspace;
 
   # Network/Router
   linux-ryot-net = kernelRyotNet.kernel;

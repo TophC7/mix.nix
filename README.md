@@ -925,7 +925,7 @@ boot.kernelPackages = pkgs.linuxPackages-ryot;
 
 # ZFS Server (use zfs_cachyos for compatibility)
 boot.kernelPackages = pkgs.linuxPackages-ryot-zfs;
-boot.zfs.package = config.boot.kernelPackages.zfs_cachyos;
+boot.zfs.package = pkgs.zfs_cachyos; # userspace; module comes from kernelPackages.zfs_cachyos
 
 # Router
 boot.kernelPackages = pkgs.linuxPackages-ryot-net;
