@@ -167,6 +167,7 @@ stdenv.mkDerivation (finalAttrs: {
   patches = [
     ./discord-rpc-compat.patch
     ./httplib-0.53-compat.patch
+    ./fix-uninitialized-metadata.patch
   ];
 
   nativeBuildInputs = [
@@ -268,7 +269,9 @@ stdenv.mkDerivation (finalAttrs: {
   ];
 
   env = {
-    NIX_CFLAGS_COMPILE = lib.optionalString stdenv.hostPlatform.isx86_64 "-msse4.2";
+    NIX_CFLAGS_COMPILE =
+      lib.optionalString stdenv.hostPlatform.isx86_64 "-msse4.2 "
+      + "-Wno-error=maybe-uninitialized";
   };
 
   preFixup = ''

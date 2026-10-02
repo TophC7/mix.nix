@@ -1,0 +1,26 @@
+--- a/src/core/memory/cheat_engine.h
++++ b/src/core/memory/cheat_engine.h
+@@ -74,8 +74,8 @@
+ private:
+     void FrameCallback(std::chrono::nanoseconds ns_late);
+ 
+-    DmntCheatVm vm;
+     CheatProcessMetadata metadata;
++    DmntCheatVm vm;
+ 
+     std::vector<CheatEntry> cheats;
+     std::atomic_bool is_pending_reload{false};
+--- a/src/core/memory/cheat_engine.cpp
++++ b/src/core/memory/cheat_engine.cpp
+@@ -220,9 +220,9 @@
+ 
+ CheatEngine::CheatEngine(System& system_, std::vector<CheatEntry> cheats_,
+                          const std::array<u8, 0x20>& build_id_)
+-    : vm{std::make_unique<StandardVmCallbacks>(system_, metadata)},
++    : metadata{.main_nso_build_id = build_id_},
++      vm{std::make_unique<StandardVmCallbacks>(system_, metadata)},
+       cheats(std::move(cheats_)), core_timing{system_.CoreTiming()}, system{system_} {
+-    metadata.main_nso_build_id = build_id_;
+ }
+ 
+ CheatEngine::~CheatEngine() {
