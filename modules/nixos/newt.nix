@@ -32,8 +32,19 @@ let
     end
 
     ${concatMapStringsSep "\n" (network: ''
+      set attempts 30
+      while test $attempts -gt 0
+        if ${pkgs.docker}/bin/docker network inspect ${escapeShellArg network} >/dev/null 2>&1
+          break
+        end
+        if test $attempts -eq 30
+          echo "Waiting for Docker network ${escapeShellArg network}..."
+        end
+        set attempts (math $attempts - 1)
+        ${pkgs.coreutils}/bin/sleep 1
+      end
       if not ${pkgs.docker}/bin/docker network inspect ${escapeShellArg network} >/dev/null 2>&1
-        echo "Required Docker network ${escapeShellArg network} does not exist" >&2
+        echo "Required Docker network ${escapeShellArg network} does not exist after 30s" >&2
         exit 1
       end
     '') cfg.extraNetworks}
@@ -176,6 +187,12 @@ in
 
     # Container service configuration
     systemd.services."docker-newt" = {
+      after = optionals (!cfg.useHostNetwork) (
+        map (net: "docker-network-${net}.service") cfg.extraNetworks
+      );
+      wants = optionals (!cfg.useHostNetwork) (
+        map (net: "docker-network-${net}.service") cfg.extraNetworks
+      );
       serviceConfig =
         containers.serviceDefaults
         // optionalAttrs (!cfg.useHostNetwork) {
