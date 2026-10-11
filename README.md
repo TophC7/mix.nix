@@ -896,6 +896,7 @@ Custom packages built by mix.nix.
 | `journey`              | Cross-platform journal app                            |
 | `monocraft-nerd-fonts` | Minecraft-style monospace font with Nerd Font icons   |
 | `olm-toggle`           | GNOME Shell extension to toggle OLM tunneling service |
+| `ompweb`              | omp coding-agent web UI, built and run with Bun        |
 | `switch2-controllers`  | Wireless Nintendo Switch 2 controller bridge          |
 | `proton-cachyos`       | CachyOS Proton build (baseline x86-64)                |
 | `proton-cachyos.v3`    | CachyOS Proton build (x86-64-v3, AVX2)                |
