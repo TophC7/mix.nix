@@ -7,7 +7,7 @@ let
   version = "6.4.0";
   pythonWithPwntools = pkgs.python3.withPackages (ps: [ ps.pwntools ]);
 in
-pkgs.buildNpmPackage {
+pkgs.buildNpmPackage (finalAttrs: {
   pname = "rea";
   inherit version;
 
@@ -61,7 +61,7 @@ pkgs.buildNpmPackage {
   '';
 
   passthru = {
-    skill = "${placeholder "out"}/lib/node_modules/rea-agents/skills/reverse-engineer-anything";
+    skill = "${finalAttrs.finalPackage}/share/agents/skills/reverse-engineer-anything";
   };
 
   meta = {
@@ -71,4 +71,4 @@ pkgs.buildNpmPackage {
     mainProgram = "rea";
     platforms = lib.platforms.unix;
   };
-}
+})
