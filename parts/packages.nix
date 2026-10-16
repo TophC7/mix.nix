@@ -12,7 +12,6 @@ in
     { system, ... }:
     let
       # Create pkgs instance that allows unfree packages
-      # Some packages (e.g., journey) have unfree licenses, we want to include them
       pkgs = import mergedInputs.nixpkgs {
         inherit system;
         config.allowUnfree = true;

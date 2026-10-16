@@ -146,19 +146,6 @@ in
       defaultText = literalExpression "pkgs.fosrl-olm";
       description = "OLM package to use.";
     };
-
-    enableGnomeExtension = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable GNOME Shell extension for toggling OLM from the panel.";
-    };
-
-    gnomeExtensionPackage = mkOption {
-      type = types.package;
-      default = pkgs.olm-toggle;
-      defaultText = literalExpression "pkgs.olm-toggle";
-      description = "GNOME extension package for OLM toggle.";
-    };
   };
 
   config = mkIf cfg.enable {
@@ -271,15 +258,5 @@ in
     networking.firewall = mkIf cfg.holepunch {
       allowedUDPPorts = [ 51820 ];
     };
-
-    # GNOME extension for panel toggle
-    environment.systemPackages = mkIf cfg.enableGnomeExtension [
-      cfg.gnomeExtensionPackage
-    ];
-
-    # Polkit rule for passwordless toggle
-    security.polkit.extraConfig = mkIf cfg.enableGnomeExtension (
-      builtins.readFile "${cfg.gnomeExtensionPackage}/share/polkit-1/rules.d/olm-toggle.rules"
-    );
   };
 }

@@ -21,16 +21,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    context-mode = {
-      url = "github:mksglu/context-mode/v1.0.169";
-      flake = false;
-    };
-
-    ompweb = {
-      url = "github:kahme247/ompweb/7dec76633f392fa0f9e148effe691356fd2b473a";
-      flake = false;
-    };
-
     matugen = {
       url = "github:InioX/Matugen";
       inputs.nixpkgs.follows = "nixpkgs";

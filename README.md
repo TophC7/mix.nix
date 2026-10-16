@@ -578,13 +578,11 @@ Native OLM binary for WireGuard-based Pangolin tunneling. Connects your machine 
 | `services.olm.pingTimeout`  | `string`         | `"5s"`   | Ping response timeout               |
 | `services.olm.healthFile`   | `null` \| `path` | `null`   | Path for connection status tracking |
 
-#### Desktop Integration
+#### Package
 
-| Option                               | Type      | Default           | Description                     |
-| ------------------------------------ | --------- | ----------------- | ------------------------------- |
-| `services.olm.package`               | `package` | `pkgs.fosrl-olm`  | OLM package to use              |
-| `services.olm.enableGnomeExtension`  | `bool`    | `false`           | Enable GNOME Shell panel toggle |
-| `services.olm.gnomeExtensionPackage` | `package` | `pkgs.olm-toggle` | GNOME extension package         |
+| Option                 | Type      | Default          | Description        |
+| ---------------------- | --------- | ---------------- | ------------------ |
+| `services.olm.package` | `package` | `pkgs.fosrl-olm` | OLM package to use |
 
 > **Authentication:** One of `secret`, `secretFile`, or `configFile` must be set. Use `secretFile` with sops-nix or agenix for production.
 
@@ -606,8 +604,6 @@ Native OLM binary for WireGuard-based Pangolin tunneling. Connects your machine 
     mtu = 1400;
     logLevel = "DEBUG";
 
-    # Desktop integration
-    enableGnomeExtension = true;
   };
 }
 ```
@@ -893,10 +889,7 @@ Custom packages built by mix.nix.
 | `gamescope-git`        | Gamescope compositor (git version)                    |
 | `gamescope-git.wsi`    | Gamescope WSI layer only (git version)                |
 | `helium`               | Chromium-based private web browser                    |
-| `journey`              | Cross-platform journal app                            |
 | `monocraft-nerd-fonts` | Minecraft-style monospace font with Nerd Font icons   |
-| `olm-toggle`           | GNOME Shell extension to toggle OLM tunneling service |
-| `ompweb`              | omp coding-agent web UI, built and run with Bun        |
 | `switch2-controllers`  | Wireless Nintendo Switch 2 controller bridge          |
 | `proton-cachyos`       | CachyOS Proton build (baseline x86-64)                |
 | `proton-cachyos.v3`    | CachyOS Proton build (x86-64-v3, AVX2)                |
