@@ -294,11 +294,11 @@
     },
     "nixpkgs-stable": {
       "locked": {
-        "lastModified": 1792030654,
-        "narHash": "sha256-OaQwAtPMTjQiY2sT/2/62UbSPhzP/0aDnWzMm/NCiUw=",
+        "lastModified": 1792295010,
+        "narHash": "sha256-F7meJtbqGttmUoMmYjRRgkVs42sn7bh7vvRvLPlUN98=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "26f4107e47e3ad0ffd0db220469ba83b6f6d96e8",
+        "rev": "8ce73368d1efd4d657e9064d29b144a52046b4e8",
         "type": "github"
       },
       "original": {
@@ -336,11 +336,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1792304296,
-        "narHash": "sha256-27s46yCUPx4m0r2h1PV+DZG9we+P5Cltzfk6NHqKp3c=",
+        "lastModified": 1792357872,
+        "narHash": "sha256-q97BOSWoagYsF6Eb2aM3cb5n/bx++MoAuSMTHQrmMXU=",
         "owner": "can1357",
         "repo": "oh-my-pi",
-        "rev": "ba85aef0b343a25f3c90b4f86628a9bd92d8414d",
+        "rev": "9d5d4ac5b50ac2bb5866e4202efc0cf785dfc57a",
         "type": "github"
       },
       "original": {
@@ -357,11 +357,11 @@
         "nixpkgs-darwin-x64": "nixpkgs-darwin-x64_2"
       },
       "locked": {
-        "lastModified": 1792289733,
-        "narHash": "sha256-ckXJ6hLOhPpJcJ+FJKxMvZXDmLrPAXkl5yqiZGLoM1g=",
+        "lastModified": 1792356219,
+        "narHash": "sha256-A9q6FCF977Y88f0/rbkrORvjFYB38Yv9cArPvk8YPHY=",
         "owner": "earendil-works",
         "repo": "pi",
-        "rev": "482c1381a00d8d00bc81697e4a980c593db6803e",
+        "rev": "1402973a9dbe8c627341e04c9744c54953e285ca",
         "type": "github"
       },
       "original": {
