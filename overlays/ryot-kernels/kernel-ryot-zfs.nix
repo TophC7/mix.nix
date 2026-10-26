@@ -68,35 +68,11 @@ let
       variant = "linux-cachyos";
     };
 
-  # nixpkgs' module aggregator now merges kmodigest certificates: it copies the
-  # kernel's `modules.cer`, then appends `<module>.ko.cer` for every external
-  # module. The pinned CachyOS kernel and zfs predate that layout, so ship empty
-  # certificates beside the cached zfs module instead of rebuilding either;
-  # nothing in this kernel verifies them. The kernel's `modules.cer` rides here
-  # too because NixOS re-overrides `kernelPackages.kernel`, dropping any attrs.
-  # ponytail: zfs-only; drop once nix-cachyos-kernel builds with kmodigest
-  # (https://github.com/xddxdd/nix-cachyos-kernel/issues/111).
-  withModuleCerts =
-    module:
-    final.symlinkJoin {
-      name = "${module.name}-cer";
-      inherit (module) version;
-      paths = [ module ];
-      postBuild = ''
-        for dir in $out/lib/modules/*; do
-          touch "$dir/modules.cer"
-        done
-        for ko in $(find $out/lib/modules -name '*.ko*'); do
-          touch "''${ko%.ko*}.ko.cer"
-        done
-      '';
-    };
-
   # Apply LLVM fixes and include the CachyOS-patched ZFS module. `self.kernel`
   # is auto-injected; keep upstream's nixpkgs pinned for patch compatibility.
   packages = (helpers.kernelModuleLLVMOverride (final.linuxKernel.packagesFor kernel)).extend (
     self: _super: {
-      zfs_cachyos = withModuleCerts (mkZfsCachyos self.callPackage "kernel");
+      zfs_cachyos = mkZfsCachyos self.callPackage "kernel";
     }
   );
 
