@@ -3,4 +3,4 @@
   pkgs,
   ...
 }:
-inputs.pi.packages.${pkgs.stdenv.hostPlatform.system}.default
+pkgs.callPackage ./package.nix { source = inputs.pi; }

@@ -890,10 +890,15 @@ Custom packages built by mix.nix.
 | `gamescope-git.wsi`    | Gamescope WSI layer only (git version)                |
 | `helium`               | Chromium-based private web browser                    |
 | `monocraft-nerd-fonts` | Minecraft-style monospace font with Nerd Font icons   |
+| `pi`                   | Pi coding agent CLI with complete workspace packaging |
 | `switch2-controllers`  | Wireless Nintendo Switch 2 controller bridge          |
 | `proton-cachyos`       | CachyOS Proton build (baseline x86-64)                |
 | `proton-cachyos.v3`    | CachyOS Proton build (x86-64-v3, AVX2)                |
 | `WiiUDownloader`       | GUI to download Wii U content from Nintendo servers   |
+
+Pi temporarily uses a local copy of its upstream Nix recipe to pack and source-override
+`pi-schema`, which the pinned upstream recipe omits. Once upstream includes both
+entries, remove `packages/pi/package.nix` and restore the input package forwarding.
 
 ```bash
 # List available packages
