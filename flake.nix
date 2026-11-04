@@ -17,7 +17,8 @@
     };
 
     omp = {
-      url = "github:can1357/oh-my-pi";
+      # ponytail: pin until upstream fixes @opentelemetry desync in nix/bun.nix
+      url = "github:can1357/oh-my-pi/83de60ad992d12e572ec3ed6fe2dd9e160cdc4a2";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
