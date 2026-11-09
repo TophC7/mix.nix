@@ -189,11 +189,11 @@
         "systems": "systems"
       },
       "locked": {
-        "lastModified": 1793907773,
-        "narHash": "sha256-5sWBQ4dkprnS+BMxlj1jYbfEEeln6wObA7KRlW26woo=",
+        "lastModified": 1794137840,
+        "narHash": "sha256-+JcD6YBf9mEN5EubCpiY7DC8c8RfZPiFsg+1An8tscA=",
         "owner": "InioX",
         "repo": "Matugen",
-        "rev": "e36299652716b1ccf2836a29ad7beb3c0854c502",
+        "rev": "e5eac085b3934d430335f173b17b0017911155f5",
         "type": "github"
       },
       "original": {
@@ -325,11 +325,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1793876309,
-        "narHash": "sha256-Wojg9lIH/hDH91iDVH2/EPw8oDSpxjxhXONbU1yf4Zg=",
+        "lastModified": 1794042290,
+        "narHash": "sha256-ziZn2PvCJE5JEEpqTdxXwJpPB+L3YqoCpTAMCzyaP3U=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "f9a75f41be3a74eab55d3a7679d34ad6cc0da977",
+        "rev": "f4a03c008967841f2a0b3cb7c436fc6fc31671f6",
         "type": "github"
       },
       "original": {
@@ -374,11 +374,11 @@
         "nixpkgs-darwin-x64": "nixpkgs-darwin-x64_2"
       },
       "locked": {
-        "lastModified": 1794122700,
-        "narHash": "sha256-sZkw+SsWEMH/PKYk9ABHrjCaHvpGZ+wKy0jJIIdmkwc=",
+        "lastModified": 1794213447,
+        "narHash": "sha256-6M+IWuwhHZ9uNzNbj4nnOkQjmFJdw+l68zQzf/HU6Tw=",
         "owner": "earendil-works",
         "repo": "pi",
-        "rev": "e49b1495045f06643a7cc4c93330fabc2ab37ce4",
+        "rev": "a77207d9ceaf47aeb270d293b6ebc75e3e3ed6b3",
         "type": "github"
       },
       "original": {
